@@ -1,0 +1,6 @@
+{
+  "name": "Pinocchio: Atmospheric Audiobook",
+  "description": "Atmospheric audiobook player powered by Gemini Pro TTS with full story playback, ambient soundscapes, and custom PDF / EPUB upload.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
