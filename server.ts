@@ -23,6 +23,7 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const TTS_MODEL = 'gemini-3.8-flash-tts';
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -137,32 +138,39 @@ app.post('/api/tts/synthesize', async (req, res) => {
   }
 
   try {
-    const promptText = `${toneGuidance}\n\n"${text.trim()}"`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-tts-preview',
-      contents: [{ parts: [{ text: promptText }] }],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voice },
-          },
+    // Gemini 3.8 TTS reads the text as a verbatim transcript, so tone
+    // guidance is passed as a style annotation rather than in the text.
+    const interaction = await ai.interactions.create({
+      model: TTS_MODEL,
+      input: [
+        {
+          type: 'user_input',
+          content: [
+            {
+              type: 'text',
+              text: text.trim(),
+              annotations: [{ type: 'speech_metadata', style: toneGuidance }],
+            },
+          ],
         },
+      ],
+      response_format: { type: 'audio' },
+      generation_config: {
+        speech_config: [{ voice }],
       },
     });
 
-    const candidate = response.candidates?.[0];
-    const part = candidate?.content?.parts?.[0];
-    const pcmBase64 = part?.inlineData?.data;
-
-    if (!pcmBase64) {
+    const audio = interaction.output_audio;
+    if (!audio?.data) {
       throw new Error('No audio returned from Gemini TTS API');
     }
 
-    // Convert raw PCM to standard WAV
-    const pcmBytes = Buffer.from(pcmBase64, 'base64');
-    const wavBuffer = pcmToWavBuffer(pcmBytes, 24000, 1);
+    // Audio arrives as a WAV file by default; wrap it only if raw PCM came back
+    const audioBytes = Buffer.from(audio.data, 'base64');
+    const isWav = audioBytes.subarray(0, 4).toString('ascii') === 'RIFF';
+    const wavBuffer = isWav
+      ? audioBytes
+      : pcmToWavBuffer(audioBytes, audio.sample_rate || 24000, audio.channels || 1);
     const wavBase64 = wavBuffer.toString('base64');
 
     // Cache result
