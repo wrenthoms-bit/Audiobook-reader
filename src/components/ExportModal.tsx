@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Chapter, AmbientSettings } from '../types';
-import { atmosphericEngine } from '../utils/ambientEngine';
+import { Chapter, Paragraph, AmbientSettings } from '../types';
+import { atmosphericEngine, AmbientSegment } from '../utils/ambientEngine';
 import { synthesizeNarrationAudio, createAtmosphericFallbackAudioBuffer } from '../utils/ttsClient';
+import { audioBufferToWavBlob, audioBufferToMp3Blob, concatAudioBuffersWithOffsets, normalizeBuffersToMatchLoudness } from '../utils/audioUtils';
 import { Download, X, Music, CheckCircle2, Loader2, Sparkles, Disc } from 'lucide-react';
+
+type ExportFormat = 'wav' | 'mp3';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -20,84 +23,145 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   settings,
 }) => {
   const [exportScope, setExportScope] = useState<'current' | 'full'>('current');
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
   const [isExporting, setIsExporting] = useState(false);
   const [progressText, setProgressText] = useState('');
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadFileName, setDownloadFileName] = useState('');
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [masteredBuffer, setMasteredBuffer] = useState<AudioBuffer | null>(null);
+  const [masteredBaseName, setMasteredBaseName] = useState('');
 
   if (!isOpen) return null;
+
+  const encodeAndSetDownload = async (buffer: AudioBuffer, baseName: string, format: ExportFormat) => {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+
+    if (format === 'mp3') {
+      setProgressText('Encoding shareable MP3 (128kbps)...');
+      const mp3Blob = await audioBufferToMp3Blob(buffer);
+      setDownloadUrl(URL.createObjectURL(mp3Blob));
+      setDownloadFileName(`${baseName}.mp3`);
+      setProgressText('MP3 ready — perfect for sharing with friends & family.');
+    } else {
+      setProgressText('Encoding Studio WAV (44.1kHz / 16-bit)...');
+      const wavBlob = audioBufferToWavBlob(buffer);
+      setDownloadUrl(URL.createObjectURL(wavBlob));
+      setDownloadFileName(`${baseName}.wav`);
+      setProgressText('Studio WAV ready.');
+    }
+  };
+
+  const handleFormatChange = async (format: ExportFormat) => {
+    setExportFormat(format);
+    if (masteredBuffer) {
+      setIsExporting(true);
+      try {
+        await encodeAndSetDownload(masteredBuffer, masteredBaseName, format);
+      } catch (err: any) {
+        console.error('Audio encode error:', err);
+        setProgressText(`Encode error: ${err?.message || 'Failed to encode audio'}`);
+      } finally {
+        setIsExporting(false);
+      }
+    }
+  };
 
   const handleStartExport = async () => {
     setIsExporting(true);
     setDownloadUrl(null);
+    setMasteredBuffer(null);
 
     try {
+      let speechBuffer: AudioBuffer;
+      let baseName: string;
+      let extraPadding = 3;
+      let ambientSegments: AmbientSegment[];
+
+      // Synthesizes a run of paragraphs as one TTS call. If the API fails to
+      // return audio for the whole group (this happens occasionally for long
+      // text — it's not quota exhaustion, since later chapters still succeed),
+      // bisect the group and retry each half, isolating the failure to the
+      // smallest possible section instead of losing the whole chapter to a
+      // multi-minute placeholder drone.
+      const synthesizeTextGroup = async (paragraphs: Paragraph[], label: string): Promise<AudioBuffer> => {
+        const text = paragraphs.map((p) => p.text).join('\n\n');
+        const result = await synthesizeNarrationAudio({
+          text,
+          voice: settings.selectedVoice,
+          tone: settings.tonePrompt,
+        });
+
+        if (result.buffer) return result.buffer;
+
+        if (paragraphs.length > 1) {
+          setProgressText(`Retrying ${label} in smaller sections after a synthesis hiccup...`);
+          const mid = Math.ceil(paragraphs.length / 2);
+          const firstBuffer = await synthesizeTextGroup(paragraphs.slice(0, mid), label);
+          const secondBuffer = await synthesizeTextGroup(paragraphs.slice(mid), label);
+          const { buffer } = await concatAudioBuffersWithOffsets([firstBuffer, secondBuffer], 0.35, 44100);
+          return buffer;
+        }
+
+        // A single paragraph still failed (e.g. TTS quota genuinely exhausted) — last resort placeholder
+        atmosphericEngine.init();
+        const ctx = atmosphericEngine.getContext();
+        if (ctx) {
+          return createAtmosphericFallbackAudioBuffer(ctx, text, settings.tonePrompt);
+        }
+        throw new Error(`Could not generate speech buffer for ${label}`);
+      };
+
+      const synthesizeChapter = async (chapter: Chapter, label: string): Promise<AudioBuffer> => {
+        const titleParagraph: Paragraph = { id: `${chapter.id}-title`, text: `${chapter.title}: ${chapter.subtitle}` };
+        return synthesizeTextGroup([titleParagraph, ...chapter.paragraphs], label);
+      };
+
       if (exportScope === 'current') {
         setProgressText(`Synthesizing narration for ${currentChapter.title}...`);
-        const fullChapterText = currentChapter.paragraphs.map((p) => p.text).join('\n\n');
+        speechBuffer = await synthesizeChapter(currentChapter, currentChapter.title);
 
-        const result = await synthesizeNarrationAudio({
-          text: fullChapterText,
-          voice: settings.selectedVoice,
-          tone: settings.tonePrompt,
-        });
-
-        let speechBuffer = result.buffer;
-        if (!speechBuffer) {
-          atmosphericEngine.init();
-          const ctx = atmosphericEngine.getContext();
-          if (ctx) {
-            speechBuffer = await createAtmosphericFallbackAudioBuffer(ctx, fullChapterText, settings.tonePrompt);
-          }
-        }
-        if (!speechBuffer) throw new Error('Could not generate speech buffer');
-
-        setProgressText('Mastering studio audio: blending rain on asphalt & analog tape warmth...');
-        const wavBlob = await atmosphericEngine.renderMasterAudiobook(speechBuffer, settings);
-
-        const url = URL.createObjectURL(wavBlob);
-        const fileName = `Pinocchio_${currentChapter.title.replace(/\s+/g, '_')}_Master.wav`;
-
-        setDownloadUrl(url);
-        setDownloadFileName(fileName);
-        setAudioDuration(speechBuffer.duration);
-        setProgressText('Mastering complete! Studio audiobook WAV is ready.');
+        baseName = `Pinocchio_${currentChapter.title.replace(/\s+/g, '_')}_Master`;
+        const totalDuration = speechBuffer.duration + extraPadding;
+        ambientSegments = [
+          { preset: currentChapter.ambientPreset, startTime: 0.8, duration: Math.max(0.5, totalDuration - 0.8) },
+        ];
       } else {
-        // Full Audiobook: Master all 7 chapters sequentially
-        setProgressText('Gathering narrative text for all 7 chapters...');
-        const fullBookText = chapters
-          .map((ch) => `${ch.title}: ${ch.subtitle}\n\n` + ch.paragraphs.map((p) => p.text).join('\n\n'))
-          .join('\n\n---\n\n');
-
-        setProgressText('Synthesizing full narrative arc with quiet, atmospheric storytelling tone...');
-        const fullResult = await synthesizeNarrationAudio({
-          text: fullBookText,
-          voice: settings.selectedVoice,
-          tone: settings.tonePrompt,
-        });
-
-        let fullBuffer = fullResult.buffer;
-        if (!fullBuffer) {
-          atmosphericEngine.init();
-          const ctx = atmosphericEngine.getContext();
-          if (ctx) {
-            fullBuffer = await createAtmosphericFallbackAudioBuffer(ctx, fullBookText, settings.tonePrompt);
-          }
+        // Full Audiobook: synthesize each chapter individually so its own
+        // scene soundscape can be scored accurately across the timeline.
+        const chapterBuffers: AudioBuffer[] = [];
+        for (let i = 0; i < chapters.length; i++) {
+          const ch = chapters[i];
+          setProgressText(`Synthesizing narration for Chapter ${ch.id}: ${ch.title} (${i + 1}/${chapters.length})...`);
+          chapterBuffers.push(await synthesizeChapter(ch, `Chapter ${ch.id}`));
         }
-        if (!fullBuffer) throw new Error('Could not generate audio buffer');
 
-        setProgressText('Mastering complete multi-track soundscapes (Rain on Asphalt & Room Tone)...');
-        const wavBlob = await atmosphericEngine.renderMasterAudiobook(fullBuffer, settings, 5);
+        setProgressText('Leveling narration loudness across chapters...');
+        normalizeBuffersToMatchLoudness(chapterBuffers);
 
-        const url = URL.createObjectURL(wavBlob);
-        const fileName = `Pinocchio_Complete_Atmospheric_Audiobook_Master.wav`;
+        setProgressText('Assembling chapters into a continuous narrative...');
+        const { buffer: combinedSpeech, offsets } = await concatAudioBuffersWithOffsets(chapterBuffers, 1.4, 44100);
 
-        setDownloadUrl(url);
-        setDownloadFileName(fileName);
-        setAudioDuration(fullBuffer.duration);
-        setProgressText('Complete audiobook mastered successfully in 44.1kHz Studio WAV.');
+        extraPadding = 5;
+        speechBuffer = combinedSpeech;
+        baseName = 'Pinocchio_Complete_Atmospheric_Audiobook_Master';
+
+        const totalDuration = combinedSpeech.duration + extraPadding;
+        ambientSegments = chapters.map((ch, i) => {
+          const start = offsets[i] + 0.8;
+          const end = i < chapters.length - 1 ? offsets[i + 1] + 0.8 : totalDuration;
+          return { preset: ch.ambientPreset, startTime: start, duration: Math.max(0.5, end - start) };
+        });
       }
+
+      setProgressText('Mastering studio audio: scoring each scene\'s soundscape & analog tape warmth...');
+      const renderedBuffer = await atmosphericEngine.renderMasterAudiobookBuffer(speechBuffer, settings, ambientSegments, extraPadding);
+
+      setMasteredBuffer(renderedBuffer);
+      setMasteredBaseName(baseName);
+      setAudioDuration(renderedBuffer.duration);
+
+      await encodeAndSetDownload(renderedBuffer, baseName, exportFormat);
     } catch (err: any) {
       console.error('Audio export error:', err);
       setProgressText(`Export error: ${err?.message || 'Failed to render audio'}`);
@@ -123,7 +187,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 Export Studio Audiobook File
               </h3>
               <p className="text-[11px] text-white/50 font-story italic -mt-0.5">
-                Broadcast WAV format with embedded ambient soundscapes
+                Broadcast-quality file with each scene's own soundscape scored in
               </p>
             </div>
           </div>
@@ -145,6 +209,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               onClick={() => {
                 setExportScope('current');
                 setDownloadUrl(null);
+                setMasteredBuffer(null);
               }}
               className={`p-3 rounded-xl border text-left transition backdrop-blur-md ${
                 exportScope === 'current'
@@ -160,6 +225,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               onClick={() => {
                 setExportScope('full');
                 setDownloadUrl(null);
+                setMasteredBuffer(null);
               }}
               className={`p-3 rounded-xl border text-left transition backdrop-blur-md ${
                 exportScope === 'full'
@@ -173,19 +239,61 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
+        {/* Format Selector */}
+        <div className="space-y-2">
+          <label className="block text-[11px] font-mono-code uppercase tracking-widest text-white/50">
+            File Format
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              onClick={() => handleFormatChange('mp3')}
+              disabled={isExporting}
+              className={`p-3 rounded-xl border text-left transition backdrop-blur-md disabled:opacity-50 ${
+                exportFormat === 'mp3'
+                  ? 'bg-[#ff4e00]/20 border-[#ff4e00]/50 text-white shadow-lg shadow-orange-950/20'
+                  : 'glass-panel-subtle border-white/10 text-white/60 hover:text-white hover:border-white/20'
+              }`}
+            >
+              <div className="text-xs font-semibold text-white">MP3</div>
+              <div className="text-[11px] text-white/50 font-serif italic">Small & easy to share</div>
+            </button>
+
+            <button
+              onClick={() => handleFormatChange('wav')}
+              disabled={isExporting}
+              className={`p-3 rounded-xl border text-left transition backdrop-blur-md disabled:opacity-50 ${
+                exportFormat === 'wav'
+                  ? 'bg-[#ff4e00]/20 border-[#ff4e00]/50 text-white shadow-lg shadow-orange-950/20'
+                  : 'glass-panel-subtle border-white/10 text-white/60 hover:text-white hover:border-white/20'
+              }`}
+            >
+              <div className="text-xs font-semibold text-white">WAV</div>
+              <div className="text-[11px] text-white/50 font-serif italic">Studio lossless quality</div>
+            </button>
+          </div>
+        </div>
+
         {/* Format Spec */}
         <div className="rounded-xl glass-panel-subtle border border-white/10 p-3.5 space-y-1.5 text-xs font-mono-code text-white/60">
           <div className="flex justify-between">
             <span>Audio Container:</span>
-            <span className="text-white font-medium">Studio Broadcast WAV (.wav)</span>
+            <span className="text-white font-medium">
+              {exportFormat === 'mp3' ? 'MP3 (.mp3, 128kbps)' : 'Studio Broadcast WAV (.wav)'}
+            </span>
           </div>
           <div className="flex justify-between">
             <span>Sample Rate & Depth:</span>
-            <span className="text-white font-medium">44,100 Hz / 16-Bit Stereo</span>
+            <span className="text-white font-medium">
+              {exportFormat === 'mp3' ? '44,100 Hz Stereo' : '44,100 Hz / 16-Bit Stereo'}
+            </span>
           </div>
           <div className="flex justify-between">
             <span>Ambient Soundscape:</span>
-            <span className="text-orange-400 font-medium">3:17 AM Rain on Asphalt</span>
+            <span className="text-orange-400 font-medium capitalize">
+              {exportScope === 'current'
+                ? currentChapter.ambientPreset.replace('-', ' ')
+                : 'Multi-Scene (per chapter)'}
+            </span>
           </div>
           <div className="flex justify-between">
             <span>Voice Tone:</span>
@@ -216,7 +324,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs font-mono-code uppercase tracking-wider rounded-xl transition shadow-lg shadow-emerald-950/40"
               >
                 <Download className="w-4 h-4" />
-                Download Studio WAV File
+                Download {exportFormat.toUpperCase()} File
               </a>
             </div>
           ) : (

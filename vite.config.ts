@@ -17,6 +17,10 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Allow access via Cloudflare quick tunnels (random *.trycloudflare.com
+      // subdomain each run) so the app can be shared without editing this file
+      // every time a new tunnel is started.
+      allowedHosts: ['.trycloudflare.com'],
     },
   };
 });

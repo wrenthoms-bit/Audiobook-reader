@@ -213,6 +213,91 @@ export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise
 }
 
 /**
+ * Strips Markdown syntax down to plain readable text (keeps heading text itself)
+ */
+function stripMarkdown(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, '') // fenced code blocks
+    .replace(/`([^`]+)`/g, '$1') // inline code
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '') // images
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links -> link text
+    .replace(/^#{1,6}\s+/gm, '') // heading markers
+    .replace(/(\*\*\*|___)(.*?)\1/g, '$2') // bold+italic
+    .replace(/(\*\*|__)(.*?)\1/g, '$2') // bold
+    .replace(/(?<![a-zA-Z0-9])(\*|_)([^*_]+)\1(?![a-zA-Z0-9])/g, '$2') // italic
+    .replace(/^>\s?/gm, '') // blockquotes
+    .replace(/^\s*[-*+]\s+/gm, '') // unordered list markers
+    .replace(/^\s*\d+\.\s+/gm, '') // ordered list markers
+    .replace(/^(?:-{3,}|\*{3,}|_{3,})$/gm, '') // horizontal rules
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Parses a Markdown file buffer into a structured Story object, using top-level
+ * (# or ##) headings as chapter breaks when present.
+ */
+export function parseMarkdownBuffer(buffer: Buffer, fileName: string): ParsedStory {
+  const rawMarkdown = buffer.toString('utf-8').replace(/\r\n/g, '\n');
+  const title = fileName.replace(/\.(md|markdown)$/i, '').replace(/[-_]/g, ' ');
+
+  const lines = rawMarkdown.split('\n');
+  const headings: { lineIdx: number; level: number; text: string }[] = [];
+  lines.forEach((line, idx) => {
+    const match = line.match(/^(#{1,2})\s+(.+)$/);
+    if (match) headings.push({ lineIdx: idx, level: match[1].length, text: match[2].trim() });
+  });
+
+  const presets: ParsedChapter['ambientPreset'][] = [
+    'night-rain',
+    'empty-city',
+    'subtle-hum',
+    'deep-lab',
+    'late-office',
+  ];
+
+  const chapters: ParsedChapter[] = [];
+
+  if (headings.length > 0) {
+    for (let c = 0; c < headings.length; c++) {
+      const startLine = headings[c].lineIdx + 1;
+      const endLine = c + 1 < headings.length ? headings[c + 1].lineIdx : lines.length;
+      const cleanText = stripMarkdown(lines.slice(startLine, endLine).join('\n'));
+      const paragraphs = textToParagraphs(cleanText, c + 1);
+      if (paragraphs.length === 0) continue;
+
+      const wordCount = cleanText.split(/\s+/).length;
+      chapters.push({
+        id: c + 1,
+        title: headings[c].text,
+        subtitle: `Section ${c + 1}`,
+        mood: 'Atmospheric narrative flow',
+        ambientPreset: presets[c % presets.length],
+        estimatedDurationSeconds: Math.max(30, Math.round((wordCount / 130) * 60)),
+        paragraphs,
+      });
+    }
+  }
+
+  if (chapters.length === 0) {
+    return {
+      title,
+      subtitle: 'Imported Markdown Document',
+      authorNote: 'Audiobook ready for real-time Gemini Pro TTS narration.',
+      chapters: splitTextIntoProceduralChapters(stripMarkdown(rawMarkdown), fileName),
+    };
+  }
+
+  return {
+    title,
+    subtitle: 'Imported Markdown Document',
+    authorNote: 'Audiobook ready for real-time Gemini Pro TTS narration.',
+    chapters,
+  };
+}
+
+/**
  * Extracts raw text from PDF buffer using pdf-parse or fallback
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {

@@ -106,6 +106,144 @@ export function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
 }
 
 /**
+ * Converts an AudioBuffer into an MP3 Blob (128kbps CBR) for compact, shareable exports.
+ */
+export async function audioBufferToMp3Blob(buffer: AudioBuffer): Promise<Blob> {
+  const lamejs = await import('@breezystack/lamejs');
+  const numChannels = Math.min(2, buffer.numberOfChannels);
+  const sampleRate = buffer.sampleRate;
+  const kbps = 128;
+
+  const encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, kbps);
+
+  const floatToInt16 = (channel: Float32Array): Int16Array => {
+    const out = new Int16Array(channel.length);
+    for (let i = 0; i < channel.length; i++) {
+      const sample = Math.max(-1, Math.min(1, channel[i]));
+      out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+    }
+    return out;
+  };
+
+  const left = floatToInt16(buffer.getChannelData(0));
+  const right = numChannels > 1 ? floatToInt16(buffer.getChannelData(1)) : undefined;
+
+  const chunks: Uint8Array[] = [];
+  const blockSize = 1152;
+
+  for (let i = 0; i < left.length; i += blockSize) {
+    const leftChunk = left.subarray(i, i + blockSize);
+    const mp3buf = right
+      ? encoder.encodeBuffer(leftChunk, right.subarray(i, i + blockSize))
+      : encoder.encodeBuffer(leftChunk);
+    if (mp3buf.length > 0) chunks.push(new Uint8Array(mp3buf));
+  }
+
+  const finalBuf = encoder.flush();
+  if (finalBuf.length > 0) chunks.push(new Uint8Array(finalBuf));
+
+  return new Blob(chunks, { type: 'audio/mpeg' });
+}
+
+/**
+ * Resamples an AudioBuffer to a target sample rate (no-op if already matching).
+ */
+export async function resampleAudioBuffer(buffer: AudioBuffer, targetSampleRate: number): Promise<AudioBuffer> {
+  if (buffer.sampleRate === targetSampleRate) return buffer;
+  const offlineCtx = new OfflineAudioContext(
+    buffer.numberOfChannels,
+    Math.ceil(buffer.duration * targetSampleRate),
+    targetSampleRate
+  );
+  const source = offlineCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  return offlineCtx.startRendering();
+}
+
+function computeRms(buffer: AudioBuffer): number {
+  const data = buffer.getChannelData(0);
+  let sumSquares = 0;
+  for (let i = 0; i < data.length; i++) sumSquares += data[i] * data[i];
+  return Math.sqrt(sumSquares / data.length);
+}
+
+/**
+ * Levels a set of independently-synthesized narration buffers (e.g. one TTS
+ * call per chapter) to a common loudness in-place, so chapter boundaries
+ * don't have an audible volume jump caused by per-request normalization
+ * differences in the TTS engine. Mutates and returns the same buffers.
+ */
+export function normalizeBuffersToMatchLoudness(buffers: AudioBuffer[]): AudioBuffer[] {
+  const rmsValues = buffers.map(computeRms);
+  const audibleRms = rmsValues.filter((v) => v > 0.0001);
+  if (audibleRms.length === 0) return buffers;
+
+  const sorted = [...audibleRms].sort((a, b) => a - b);
+  const targetRms = sorted[Math.floor(sorted.length / 2)];
+
+  buffers.forEach((buffer, idx) => {
+    const rms = rmsValues[idx];
+    if (rms <= 0.0001) return;
+
+    const gain = Math.max(0.5, Math.min(2.0, targetRms / rms));
+    if (Math.abs(gain - 1) < 0.02) return;
+
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+      const data = buffer.getChannelData(c);
+      let peak = 0;
+      for (let i = 0; i < data.length; i++) {
+        const scaled = Math.abs(data[i] * gain);
+        if (scaled > peak) peak = scaled;
+      }
+      const safeGain = peak > 0.98 ? gain * (0.98 / peak) : gain;
+      for (let i = 0; i < data.length; i++) data[i] *= safeGain;
+    }
+  });
+
+  return buffers;
+}
+
+/**
+ * Concatenates several narration buffers (e.g. one per chapter) into a single
+ * continuous AudioBuffer with a short gap between each, resampling to a
+ * common sample rate first. Returns the combined buffer plus each input
+ * buffer's start offset (in seconds) within it, so callers can align other
+ * timed events (like per-chapter ambient soundscapes) to the same timeline.
+ */
+export async function concatAudioBuffersWithOffsets(
+  buffers: AudioBuffer[],
+  gapSeconds = 1.4,
+  targetSampleRate = 44100
+): Promise<{ buffer: AudioBuffer; offsets: number[] }> {
+  const resampled = await Promise.all(buffers.map((b) => resampleAudioBuffer(b, targetSampleRate)));
+  const numChannels = Math.max(1, ...resampled.map((b) => b.numberOfChannels));
+  const gapFrames = Math.round(gapSeconds * targetSampleRate);
+
+  let totalFrames = 0;
+  const offsets: number[] = [];
+  resampled.forEach((b, i) => {
+    offsets.push(totalFrames / targetSampleRate);
+    totalFrames += b.length;
+    if (i < resampled.length - 1) totalFrames += gapFrames;
+  });
+
+  const result = new AudioBuffer({ length: totalFrames, numberOfChannels: numChannels, sampleRate: targetSampleRate });
+  let cursor = 0;
+  resampled.forEach((b, i) => {
+    for (let c = 0; c < numChannels; c++) {
+      const channelData = c < b.numberOfChannels ? b.getChannelData(c) : b.getChannelData(0);
+      result.getChannelData(c).set(channelData, cursor);
+    }
+    cursor += b.length;
+    if (i < resampled.length - 1) cursor += gapFrames;
+  });
+
+  return { buffer: result, offsets };
+}
+
+/**
  * Base64 string to Uint8Array helper
  */
 export function base64ToUint8Array(base64: string): Uint8Array {

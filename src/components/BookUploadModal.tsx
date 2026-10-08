@@ -64,8 +64,8 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
     setErrorMessage(null);
     setStatusMessage(null);
     const name = file.name.toLowerCase();
-    if (!name.endsWith('.pdf') && !name.endsWith('.epub')) {
-      setErrorMessage('Please select a valid PDF (.pdf) or EPUB (.epub) document.');
+    if (!name.endsWith('.pdf') && !name.endsWith('.epub') && !name.endsWith('.md') && !name.endsWith('.markdown')) {
+      setErrorMessage('Please select a valid PDF (.pdf), EPUB (.epub), or Markdown (.md) document.');
       return;
     }
 
@@ -100,12 +100,16 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
 
     try {
       const base64Data = await fileToBase64(selectedFile);
-      const isPdf = selectedFile.name.toLowerCase().endsWith('.pdf');
-      const fileType = isPdf ? 'pdf' : 'epub';
+      const lowerName = selectedFile.name.toLowerCase();
+      const isPdf = lowerName.endsWith('.pdf');
+      const isMarkdown = lowerName.endsWith('.md') || lowerName.endsWith('.markdown');
+      const fileType = isPdf ? 'pdf' : isMarkdown ? 'markdown' : 'epub';
 
       setStatusMessage(
         isPdf
           ? 'Analyzing PDF pages and structuring narrative chapters...'
+          : isMarkdown
+          ? 'Structuring Markdown headings into narrative chapters...'
           : 'Extracting EPUB chapter spine and narrative text...'
       );
 
@@ -158,7 +162,7 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-white/50 font-serif italic -mt-0.5">
-                Upload any PDF or EPUB to listen with real-time narration and ambient soundscapes
+                Upload any PDF, EPUB, or Markdown file to listen with real-time narration and ambient soundscapes
               </p>
             </div>
           </div>
@@ -199,7 +203,7 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.epub"
+            accept=".pdf,.epub,.md,.markdown"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -213,7 +217,11 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
                 <p className="text-sm font-semibold text-white">{selectedFile.name}</p>
                 <p className="text-xs text-white/50 font-mono-code mt-0.5">
                   {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB ·{' '}
-                  {selectedFile.name.endsWith('.pdf') ? 'PDF Document' : 'EPUB eBook'}
+                  {selectedFile.name.toLowerCase().endsWith('.pdf')
+                    ? 'PDF Document'
+                    : selectedFile.name.toLowerCase().endsWith('.md') || selectedFile.name.toLowerCase().endsWith('.markdown')
+                    ? 'Markdown Document'
+                    : 'EPUB eBook'}
                 </p>
               </div>
               <span className="inline-block text-[11px] text-[#ff4e00] underline font-medium hover:text-orange-300">
@@ -227,8 +235,9 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
               </div>
               <div>
                 <p className="text-sm font-medium text-white">
-                  Drop your <span className="text-[#ff4e00] font-semibold">PDF</span> or{' '}
-                  <span className="text-[#ff4e00] font-semibold">EPUB</span> book file here
+                  Drop your <span className="text-[#ff4e00] font-semibold">PDF</span>,{' '}
+                  <span className="text-[#ff4e00] font-semibold">EPUB</span>, or{' '}
+                  <span className="text-[#ff4e00] font-semibold">Markdown</span> file here
                 </p>
                 <p className="text-xs text-white/40 mt-1 font-serif italic">
                   Supports full books, manuscripts, novel chapters, and articles up to 40MB

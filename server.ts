@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import {
   parseEpubBuffer,
+  parseMarkdownBuffer,
   extractPdfText,
   structureBookWithGemini,
   splitTextIntoProceduralChapters,
@@ -200,7 +201,7 @@ app.post('/api/tts/synthesize', async (req, res) => {
   }
 });
 
-// PDF & EPUB Book Upload and Parsing Endpoint
+// PDF, EPUB & Markdown Book Upload and Parsing Endpoint
 app.post('/api/books/parse', async (req, res) => {
   const { fileBase64, fileName, fileType } = req.body;
 
@@ -210,9 +211,10 @@ app.post('/api/books/parse', async (req, res) => {
 
   const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
   const isEpub = fileType === 'epub' || fileName.toLowerCase().endsWith('.epub');
+  const isMarkdown = fileType === 'markdown' || /\.(md|markdown)$/i.test(fileName);
 
-  if (!isPdf && !isEpub) {
-    return res.status(400).json({ error: 'Unsupported file type. Please provide a .pdf or .epub file.' });
+  if (!isPdf && !isEpub && !isMarkdown) {
+    return res.status(400).json({ error: 'Unsupported file type. Please provide a .pdf, .epub, or .md file.' });
   }
 
   try {
@@ -226,6 +228,31 @@ app.post('/api/books/parse', async (req, res) => {
         story: parsedStory,
         source: 'epub',
         message: `Successfully parsed EPUB into ${parsedStory.chapters.length} chapters.`,
+      });
+    }
+
+    if (isMarkdown) {
+      const rawText = buffer.toString('utf-8');
+      if (ai) {
+        try {
+          const structuredStory = await structureBookWithGemini(ai, { text: rawText }, fileName);
+          return res.json({
+            success: true,
+            story: structuredStory,
+            source: 'gemini-markdown',
+            message: `Structured with Gemini into ${structuredStory.chapters.length} chapters.`,
+          });
+        } catch (geminiMdErr) {
+          console.warn('Gemini markdown structuring failed, using procedural markdown parsing:', geminiMdErr);
+        }
+      }
+
+      const parsedStory = parseMarkdownBuffer(buffer, fileName);
+      return res.json({
+        success: true,
+        story: parsedStory,
+        source: 'procedural-markdown',
+        message: `Parsed Markdown into ${parsedStory.chapters.length} chapters.`,
       });
     }
 

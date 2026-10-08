@@ -61,7 +61,7 @@ export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
                 Atmospheric Soundscape Mixer
               </h3>
               <p className="text-[11px] text-white/50 font-story italic -mt-0.5">
-                Real-time procedural rain & analog tape warmth
+                Real-time procedural scene soundscapes & analog tape warmth
               </p>
             </div>
           </div>
@@ -114,12 +114,12 @@ export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
             />
           </div>
 
-          {/* Rain on Asphalt */}
+          {/* Ambient Soundscape (scene-dependent) */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs font-mono-code">
               <span className="flex items-center gap-1.5 text-white/80">
                 <CloudRain className="w-3.5 h-3.5 text-orange-400" />
-                3:17 AM Rain on Asphalt & Droplets
+                Ambient Soundscape Level
               </span>
               <span className="text-white/50">{Math.round(settings.rainVolume * 100)}%</span>
             </div>

@@ -24,6 +24,14 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
+const AMBIENT_PRESET_DESCRIPTIONS: Record<Chapter['ambientPreset'], string> = {
+  'night-rain': 'Layered gentle rain on asphalt and subtle analog room tone.',
+  'deep-lab': 'Low electrical hum with a slow tremolo and rare crackles.',
+  'subtle-hum': 'A barely-there room presence, quiet and still.',
+  'late-office': 'Fluorescent buzz, distant HVAC drone, and occasional keyboard clacks.',
+  'empty-city': 'Slow wind gusts through empty streets with rare distant rumbles.',
+};
+
 export default function App() {
   const [currentStory, setCurrentStory] = useState<Story>(PINOCCHIO_STORY);
   const [currentChapterId, setCurrentChapterId] = useState<number>(1);
@@ -148,6 +156,7 @@ export default function App() {
 
     try {
       atmosphericEngine.init();
+      atmosphericEngine.setPreset(chapter.ambientPreset);
 
       const result = await synthesizeNarrationAudio({
         text: paragraph.text,
@@ -239,8 +248,14 @@ export default function App() {
     }
   };
 
-  // Start reading aloud the FULL STORY from the very beginning (Chapter 1, Paragraph 1)
+  // Start reading aloud the FULL STORY from the very beginning (Chapter 1, Paragraph 1),
+  // or pause playback if the story is already playing (mirrors handleTogglePlay).
   const handlePlayFullStory = () => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      atmosphericEngine.stopSpeech();
+      return;
+    }
     setIsFullStoryMode(true);
     playParagraph(currentStory.chapters[0]?.id || 1, 0);
   };
@@ -482,7 +497,7 @@ export default function App() {
                 <span className="capitalize">{currentChapter.ambientPreset.replace('-', ' ')}</span>
               </div>
               <p className="text-[11px] text-white/45 leading-normal">
-                Layered gentle rain on asphalt and subtle analog room tone.
+                {AMBIENT_PRESET_DESCRIPTIONS[currentChapter.ambientPreset]}
               </p>
             </div>
           </div>
