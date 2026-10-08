@@ -17,12 +17,21 @@ export interface TTSRequestOptions {
   voice?: VoiceName;
   /** Tone guidance text (resolved from the book config / tone preset) */
   tonePrompt?: string;
+  /**
+   * Always ask the server, even after a quota error. Playback switches to the
+   * browser voice once the quota is hit; an export has to wait and retry.
+   */
+  ignoreQuotaFlag?: boolean;
 }
 
 export interface TTSResult {
   buffer?: AudioBuffer;
   isGeminiTTS: boolean;
   isQuotaExhausted?: boolean;
+  /** How long the server asked us to wait before trying again */
+  retryAfterSeconds?: number;
+  /** Why no audio came back, when the server said */
+  errorMessage?: string;
 }
 
 /**
@@ -44,9 +53,11 @@ export async function synthesizeNarrationAudio(
   if (!ctx) throw new Error('AudioContext failed to initialize');
 
   // If already known quota exhausted, switch directly to browser speech engine
-  if (isQuotaExhausted) {
+  if (isQuotaExhausted && !options.ignoreQuotaFlag) {
     return { isGeminiTTS: false, isQuotaExhausted: true };
   }
+
+  let errorMessage: string | undefined;
 
   try {
     const res = await fetch('/api/tts/synthesize', {
@@ -59,7 +70,12 @@ export async function synthesizeNarrationAudio(
 
     if (data.isQuotaExhausted) {
       isQuotaExhausted = true;
-      return { isGeminiTTS: false, isQuotaExhausted: true };
+      return {
+        isGeminiTTS: false,
+        isQuotaExhausted: true,
+        retryAfterSeconds: data.remainingCooldownSeconds,
+        errorMessage: data.message,
+      };
     }
 
     if (data.success && data.audioBase64) {
@@ -67,13 +83,16 @@ export async function synthesizeNarrationAudio(
       const pcmBytes = base64ToUint8Array(data.audioBase64);
       const audioBuffer = await ctx.decodeAudioData(pcmBytes.buffer);
       bufferCache.set(cacheKey, audioBuffer);
+      if (options.ignoreQuotaFlag) isQuotaExhausted = false;
       return { buffer: audioBuffer, isGeminiTTS: true };
     }
+    errorMessage = data.error || data.message;
   } catch (err) {
     console.warn('Backend TTS request error, switching to browser voice engine:', err);
+    errorMessage = err instanceof Error ? err.message : String(err);
   }
 
-  return { isGeminiTTS: false, isQuotaExhausted };
+  return { isGeminiTTS: false, isQuotaExhausted: options.ignoreQuotaFlag ? false : isQuotaExhausted, errorMessage };
 }
 
 /**

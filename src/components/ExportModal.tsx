@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { BookConfig, Chapter, Paragraph, AmbientSettings, VoiceName } from '../types';
 import { resolveTonePrompt, speechParts, toneLabel } from '../../shared/bookConfig';
 import { atmosphericEngine, AmbientSegment } from '../utils/ambientEngine';
-import { synthesizeNarrationAudio, createAtmosphericFallbackAudioBuffer } from '../utils/ttsClient';
+import { synthesizeNarrationAudio } from '../utils/ttsClient';
 import { audioBufferToWavBlob, audioBufferToMp3Blob, concatAudioBuffersWithOffsets, normalizeBuffersToMatchLoudness } from '../utils/audioUtils';
 import { Download, X, Music, CheckCircle2, Loader2, Sparkles, Disc } from 'lucide-react';
 
 type ExportFormat = 'wav' | 'mp3';
+
+// How many times to wait out a Gemini rate limit before stopping an export
+const MAX_QUOTA_RETRIES = 5;
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -91,13 +94,29 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       // multi-minute placeholder drone.
       const synthesizeTextGroup = async (paragraphs: Paragraph[], voice: VoiceName, label: string): Promise<AudioBuffer> => {
         const text = paragraphs.map((p) => p.text).join('\n\n');
-        const result = await synthesizeNarrationAudio({
-          text,
-          voice,
-          tonePrompt,
-        });
+
+        // When the API rate limit is hit, wait it out and retry rather than
+        // giving up on real narration for the rest of the book.
+        let result = await synthesizeNarrationAudio({ text, voice, tonePrompt, ignoreQuotaFlag: true });
+        for (let attempt = 1; result.isQuotaExhausted && attempt <= MAX_QUOTA_RETRIES; attempt++) {
+          const waitSeconds = Math.max(15, (result.retryAfterSeconds || 60) + 2);
+          for (let remaining = waitSeconds; remaining > 0; remaining--) {
+            setProgressText(
+              `Gemini rate limit reached during ${label}. Resuming in ${remaining}s (retry ${attempt} of ${MAX_QUOTA_RETRIES})...`
+            );
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          setProgressText(`Resuming narration for ${label}...`);
+          result = await synthesizeNarrationAudio({ text, voice, tonePrompt, ignoreQuotaFlag: true });
+        }
 
         if (result.buffer) return result.buffer;
+
+        if (result.isQuotaExhausted) {
+          throw new Error(
+            'Gemini TTS quota is still exhausted, so the export was stopped. Narration generated so far is cached; start the export again later to continue from there.'
+          );
+        }
 
         if (paragraphs.length > 1) {
           setProgressText(`Retrying ${label} in smaller sections after a synthesis hiccup...`);
@@ -108,13 +127,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           return buffer;
         }
 
-        // A single paragraph still failed (e.g. TTS quota genuinely exhausted) — last resort placeholder
-        atmosphericEngine.init();
-        const ctx = atmosphericEngine.getContext();
-        if (ctx) {
-          return createAtmosphericFallbackAudioBuffer(ctx, text, tonePrompt);
-        }
-        throw new Error(`Could not generate speech buffer for ${label}`);
+        // A single passage still failed: stop rather than export a file with
+        // a placeholder tone where the narration should be.
+        throw new Error(
+          `Could not generate narration for ${label}${result.errorMessage ? ` (${result.errorMessage})` : ''}. Narration generated so far is cached; start the export again to retry.`
+        );
       };
 
       const synthesizeChapter = async (chapter: Chapter, label: string): Promise<AudioBuffer> => {
