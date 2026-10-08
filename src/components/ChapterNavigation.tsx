@@ -107,7 +107,7 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
                   </span>
                   <span className="flex items-center gap-1">
                     <CloudRain className="w-3 h-3 text-orange-400/70" />
-                    {chapter.ambientPreset.replace('-', ' ')}
+                    {chapter.soundscape.replace('-', ' ')}
                   </span>
                 </div>
               </div>

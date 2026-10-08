@@ -1,5 +1,8 @@
 import { atmosphericEngine } from './ambientEngine';
 import { base64ToUint8Array } from './audioUtils';
+import { DEFAULT_TONE_PRESET, DEFAULT_VOICE, TONE_PRESETS, VoiceName } from '../../shared/bookConfig';
+
+const DEFAULT_TONE_PROMPT = TONE_PRESETS[DEFAULT_TONE_PRESET].prompt;
 
 // In-memory cache for decoded AudioBuffers
 const bufferCache = new Map<string, AudioBuffer>();
@@ -11,8 +14,9 @@ export function getIsQuotaExhausted(): boolean {
 
 export interface TTSRequestOptions {
   text: string;
-  voice?: 'Charon' | 'Fenrir' | 'Kore' | 'Puck' | 'Zephyr';
-  tone?: 'quiet-atmospheric' | 'somber-nocturnal' | 'measured-whisper';
+  voice?: VoiceName;
+  /** Tone guidance text (resolved from the book config / tone preset) */
+  tonePrompt?: string;
 }
 
 export interface TTSResult {
@@ -27,8 +31,8 @@ export interface TTSResult {
 export async function synthesizeNarrationAudio(
   options: TTSRequestOptions
 ): Promise<TTSResult> {
-  const { text, voice = 'Charon', tone = 'quiet-atmospheric' } = options;
-  const cacheKey = `${voice}_${tone}_${text.trim()}`;
+  const { text, voice = DEFAULT_VOICE, tonePrompt = DEFAULT_TONE_PROMPT } = options;
+  const cacheKey = `${voice}_${tonePrompt}_${text.trim()}`;
 
   if (bufferCache.has(cacheKey)) {
     return { buffer: bufferCache.get(cacheKey)!, isGeminiTTS: true };
@@ -48,7 +52,7 @@ export async function synthesizeNarrationAudio(
     const res = await fetch('/api/tts/synthesize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice, tone }),
+      body: JSON.stringify({ text, voice, tonePrompt }),
     });
 
     const data = await res.json();
@@ -117,9 +121,9 @@ export async function prefetchNarrationAudio(options: TTSRequestOptions): Promis
   if (isQuotaExhausted) return;
 
   try {
-    const { text, voice = 'Charon', tone = 'quiet-atmospheric' } = options;
+    const { text, voice = DEFAULT_VOICE, tonePrompt = DEFAULT_TONE_PROMPT } = options;
     if (!text || text.trim().length === 0) return;
-    const cacheKey = `${voice}_${tone}_${text.trim()}`;
+    const cacheKey = `${voice}_${tonePrompt}_${text.trim()}`;
     if (bufferCache.has(cacheKey)) return;
     await synthesizeNarrationAudio(options);
   } catch {

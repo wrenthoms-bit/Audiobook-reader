@@ -1,26 +1,13 @@
-export interface Paragraph {
-  id: string;
-  text: string;
-  speaker?: 'narrator' | 'ellis' | 'pino' | 'ruth' | 'halvard' | 'tom';
-  isQuote?: boolean;
-}
+import type { VoiceName } from '../shared/bookConfig';
 
-export interface Chapter {
-  id: number;
-  title: string;
-  subtitle?: string;
-  paragraphs: Paragraph[];
-  mood: string;
-  ambientPreset: 'night-rain' | 'deep-lab' | 'subtle-hum' | 'late-office' | 'empty-city';
-  estimatedDurationSeconds: number;
-}
-
-export interface Story {
-  title: string;
-  subtitle: string;
-  authorNote: string;
-  chapters: Chapter[];
-}
+export type {
+  BookConfig,
+  BookCharacter,
+  Chapter,
+  Paragraph,
+  Soundscape,
+  VoiceName,
+} from '../shared/bookConfig';
 
 export interface AmbientSettings {
   masterVolume: number;
@@ -28,8 +15,10 @@ export interface AmbientSettings {
   analogTapeWarmth: number;
   voiceVolume: number;
   playbackRate: number;
-  selectedVoice: 'Charon' | 'Fenrir' | 'Kore' | 'Puck' | 'Zephyr';
-  tonePrompt: 'quiet-atmospheric' | 'somber-nocturnal' | 'measured-whisper';
+  /** Narrator voice; characters use the voices assigned in the book config */
+  selectedVoice: VoiceName;
+  /** Tone preset id, or BOOK_TONE_ID for the book's own tone prompt */
+  tonePrompt: string;
   cityHumVolume?: number;
   nocturnalDroneVolume?: number;
 }

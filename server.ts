@@ -10,6 +10,14 @@ import {
   structureBookWithGemini,
   splitTextIntoProceduralChapters,
 } from './server/bookParser';
+import {
+  DEFAULT_TONE_PRESET,
+  DEFAULT_VOICE,
+  MAX_TONE_PROMPT_LENGTH,
+  TONE_PRESETS,
+  isVoiceName,
+  normalizeBookConfig,
+} from './shared/bookConfig';
 
 dotenv.config();
 
@@ -83,14 +91,20 @@ app.get('/api/health', (req, res) => {
 
 // TTS Narration API Endpoint
 app.post('/api/tts/synthesize', async (req, res) => {
-  const { text, voice = 'Charon', tone = 'quiet-atmospheric' } = req.body;
+  const { text } = req.body;
+  const voice = isVoiceName(req.body.voice) ? req.body.voice : DEFAULT_VOICE;
+  // Tone guidance comes from the book config (or a tone preset) on the client
+  const toneGuidance =
+    typeof req.body.tonePrompt === 'string' && req.body.tonePrompt.trim()
+      ? req.body.tonePrompt.trim().slice(0, MAX_TONE_PROMPT_LENGTH)
+      : TONE_PRESETS[DEFAULT_TONE_PRESET].prompt;
 
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'Text prompt is required.' });
   }
 
   // Create cache key
-  const cacheKey = `${voice}_${tone}_${text.trim()}`;
+  const cacheKey = `${voice}_${toneGuidance}_${text.trim()}`;
   if (audioCache.has(cacheKey)) {
     return res.json({
       success: true,
@@ -123,13 +137,6 @@ app.post('/api/tts/synthesize', async (req, res) => {
   }
 
   try {
-    let toneGuidance = 'Read in a quiet, atmospheric storytelling tone with gentle cadence, deliberate pauses, and introspective depth. Do not shout or rush. Speak like a solitary narrator in an empty city at 3:17 in the morning.';
-    if (tone === 'somber-nocturnal') {
-      toneGuidance = 'Read in a deeply somber, muted nocturnal storytelling tone. Slow, measured, observant, whispered and quiet.';
-    } else if (tone === 'measured-whisper') {
-      toneGuidance = 'Read with a calm, gentle, measured tone, quiet and contemplative, as if confiding a secret.';
-    }
-
     const promptText = `${toneGuidance}\n\n"${text.trim()}"`;
 
     const response = await ai.models.generateContent({
@@ -225,7 +232,7 @@ app.post('/api/books/parse', async (req, res) => {
       const parsedStory = await parseEpubBuffer(buffer, fileName);
       return res.json({
         success: true,
-        story: parsedStory,
+        book: parsedStory,
         source: 'epub',
         message: `Successfully parsed EPUB into ${parsedStory.chapters.length} chapters.`,
       });
@@ -238,7 +245,7 @@ app.post('/api/books/parse', async (req, res) => {
           const structuredStory = await structureBookWithGemini(ai, { text: rawText }, fileName);
           return res.json({
             success: true,
-            story: structuredStory,
+            book: structuredStory,
             source: 'gemini-markdown',
             message: `Structured with Gemini into ${structuredStory.chapters.length} chapters.`,
           });
@@ -250,7 +257,7 @@ app.post('/api/books/parse', async (req, res) => {
       const parsedStory = parseMarkdownBuffer(buffer, fileName);
       return res.json({
         success: true,
-        story: parsedStory,
+        book: parsedStory,
         source: 'procedural-markdown',
         message: `Parsed Markdown into ${parsedStory.chapters.length} chapters.`,
       });
@@ -263,7 +270,7 @@ app.post('/api/books/parse', async (req, res) => {
           const structuredStory = await structureBookWithGemini(ai, { isPdf: true, base64: fileBase64 }, fileName);
           return res.json({
             success: true,
-            story: structuredStory,
+            book: structuredStory,
             source: 'gemini-pdf',
             message: `Structured with Gemini into ${structuredStory.chapters.length} chapters.`,
           });
@@ -285,7 +292,7 @@ app.post('/api/books/parse', async (req, res) => {
           const structuredStory = await structureBookWithGemini(ai, { text: rawText }, fileName);
           return res.json({
             success: true,
-            story: structuredStory,
+            book: structuredStory,
             source: 'gemini-text',
             message: `Extracted and structured with Gemini into ${structuredStory.chapters.length} chapters.`,
           });
@@ -300,12 +307,12 @@ app.post('/api/books/parse', async (req, res) => {
 
       return res.json({
         success: true,
-        story: {
-          title: cleanTitle.toUpperCase(),
+        book: normalizeBookConfig({
+          title: cleanTitle,
           subtitle: 'Imported PDF Document',
-          authorNote: 'Audiobook ready for real-time Gemini Pro TTS narration.',
+          description: 'Audiobook ready for real-time Gemini Pro TTS narration.',
           chapters: proceduralChapters,
-        },
+        }),
         source: 'procedural-pdf',
         message: `Parsed PDF into ${proceduralChapters.length} audio sections.`,
       });
@@ -335,7 +342,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Pinocchio Audiobook server running on port ${PORT}`);
+    console.log(`Lectern audiobook server running on port ${PORT}`);
   });
 }
 

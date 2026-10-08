@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { PINOCCHIO_STORY } from './data/storyData';
-import { Story, Chapter, Paragraph, AmbientSettings } from './types';
+import { BUNDLED_BOOKS, DEFAULT_BOOK } from './books';
+import { BookConfig, Paragraph, AmbientSettings } from './types';
+import {
+  SOUNDSCAPE_DESCRIPTIONS,
+  initialToneId,
+  resolveTonePrompt,
+  voiceForParagraph,
+} from '../shared/bookConfig';
 import { atmosphericEngine } from './utils/ambientEngine';
 import { synthesizeNarrationAudio, prefetchNarrationAudio } from './utils/ttsClient';
 import { ChapterNavigation } from './components/ChapterNavigation';
@@ -21,19 +27,12 @@ import {
   Sparkles,
   UploadCloud,
   Play,
-  RotateCcw,
 } from 'lucide-react';
 
-const AMBIENT_PRESET_DESCRIPTIONS: Record<Chapter['ambientPreset'], string> = {
-  'night-rain': 'Layered gentle rain on asphalt and subtle analog room tone.',
-  'deep-lab': 'Low electrical hum with a slow tremolo and rare crackles.',
-  'subtle-hum': 'A barely-there room presence, quiet and still.',
-  'late-office': 'Fluorescent buzz, distant HVAC drone, and occasional keyboard clacks.',
-  'empty-city': 'Slow wind gusts through empty streets with rare distant rumbles.',
-};
+const APP_NAME = 'Lectern';
 
 export default function App() {
-  const [currentStory, setCurrentStory] = useState<Story>(PINOCCHIO_STORY);
+  const [currentStory, setCurrentStory] = useState<BookConfig>(DEFAULT_BOOK);
   const [currentChapterId, setCurrentChapterId] = useState<number>(1);
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -52,8 +51,9 @@ export default function App() {
     rainVolume: 0.35,
     analogTapeWarmth: 0.15,
     playbackRate: 1.0,
-    selectedVoice: 'Charon', // Deep, quiet, atmospheric storyteller
-    tonePrompt: 'quiet-atmospheric',
+    // Narrator voice and tone start from the book config
+    selectedVoice: DEFAULT_BOOK.narration.narratorVoice,
+    tonePrompt: initialToneId(DEFAULT_BOOK),
   });
 
   // Current Chapter reference
@@ -64,8 +64,8 @@ export default function App() {
       title: 'Chapter 1',
       subtitle: '',
       paragraphs: [],
-      mood: 'Atmospheric narrative',
-      ambientPreset: 'night-rain',
+      mood: '',
+      soundscape: currentStory.defaultSoundscape,
       estimatedDurationSeconds: 60,
     };
 
@@ -105,21 +105,21 @@ export default function App() {
     const chapter = story.chapters.find((c) => c.id === chapterId);
     if (!chapter) return;
 
-    let nextText: string | null = null;
+    let nextParagraph: Paragraph | null = null;
     if (paraIdx + 1 < chapter.paragraphs.length) {
-      nextText = chapter.paragraphs[paraIdx + 1].text;
+      nextParagraph = chapter.paragraphs[paraIdx + 1];
     } else {
       const nextChapter = story.chapters.find((c) => c.id === chapterId + 1);
       if (nextChapter && nextChapter.paragraphs[0]) {
-        nextText = nextChapter.paragraphs[0].text;
+        nextParagraph = nextChapter.paragraphs[0];
       }
     }
 
-    if (nextText) {
+    if (nextParagraph) {
       prefetchNarrationAudio({
-        text: nextText,
-        voice: settingsRef.current.selectedVoice,
-        tone: settingsRef.current.tonePrompt,
+        text: nextParagraph.text,
+        voice: voiceForParagraph(story, nextParagraph, settingsRef.current.selectedVoice),
+        tonePrompt: resolveTonePrompt(settingsRef.current.tonePrompt, story),
       });
     }
   }, []);
@@ -141,6 +141,9 @@ export default function App() {
     setIsPlaying(true);
 
     const paragraph = chapter.paragraphs[paraIdx];
+    // Character paragraphs use the voice assigned in the book config
+    const voice = voiceForParagraph(story, paragraph, settingsRef.current.selectedVoice);
+    const speechSettings = () => ({ ...settingsRef.current, selectedVoice: voice });
 
     // Scroll smoothly to active paragraph
     const el = document.getElementById(`para-${paragraph.id}`);
@@ -153,12 +156,12 @@ export default function App() {
 
     try {
       atmosphericEngine.init();
-      atmosphericEngine.setPreset(chapter.ambientPreset);
+      atmosphericEngine.setPreset(chapter.soundscape);
 
       const result = await synthesizeNarrationAudio({
         text: paragraph.text,
-        voice: settingsRef.current.selectedVoice,
-        tone: settingsRef.current.tonePrompt,
+        voice,
+        tonePrompt: resolveTonePrompt(settingsRef.current.tonePrompt, story),
       });
 
       setIsLoadingAudio(false);
@@ -205,7 +208,7 @@ export default function App() {
         setIsUsingFallbackTTS(true);
         atmosphericEngine.playWebSpeech(
           paragraph.text,
-          settingsRef.current,
+          speechSettings(),
           onParagraphCompleted
         );
       }
@@ -216,7 +219,7 @@ export default function App() {
         setIsLoadingAudio(false);
         atmosphericEngine.playWebSpeech(
           paragraph.text,
-          settingsRef.current,
+          speechSettings(),
           () => {
             if (!isPlayingRef.current) return;
             const nextParaIdx = paraIdx + 1;
@@ -257,24 +260,19 @@ export default function App() {
     playParagraph(currentStory.chapters[0]?.id || 1, 0);
   };
 
-  // Handle newly uploaded book (PDF or EPUB)
-  const handleBookLoaded = (newStory: Story) => {
+  // Switch to another book (uploaded or bundled): both are plain book configs
+  const handleBookLoaded = (book: BookConfig) => {
     atmosphericEngine.stopSpeech();
     setIsPlaying(false);
     setIsFullStoryMode(false);
-    setCurrentStory(newStory);
-    setCurrentChapterId(newStory.chapters[0]?.id || 1);
+    setCurrentStory(book);
+    setCurrentChapterId(book.chapters[0]?.id || 1);
     setActiveParagraphIndex(0);
-  };
-
-  // Reset back to original Pinocchio story
-  const handleResetToPinocchio = () => {
-    atmosphericEngine.stopSpeech();
-    setIsPlaying(false);
-    setIsFullStoryMode(false);
-    setCurrentStory(PINOCCHIO_STORY);
-    setCurrentChapterId(1);
-    setActiveParagraphIndex(0);
+    setSettings((prev) => ({
+      ...prev,
+      selectedVoice: book.narration.narratorVoice,
+      tonePrompt: initialToneId(book),
+    }));
   };
 
   // Navigation handlers
@@ -325,7 +323,7 @@ export default function App() {
   const estimatedTotalSeconds = currentChapter.estimatedDurationSeconds || 60;
   const estimatedCurrentSeconds = Math.round(progress * estimatedTotalSeconds);
 
-  const isCustomBook = currentStory.title !== PINOCCHIO_STORY.title;
+  const isCustomBook = !BUNDLED_BOOKS.includes(currentStory);
 
   return (
     <div className="relative flex flex-col min-h-screen bg-[#050505] text-neutral-100 font-sans selection:bg-[#ff4e00]/30 selection:text-orange-200 overflow-hidden">
@@ -349,13 +347,13 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-display font-bold tracking-widest text-white flex items-center gap-2">
-                {currentStory.title.length > 22 ? `${currentStory.title.slice(0, 20)}...` : currentStory.title}
+                {APP_NAME}
                 <span className="hidden sm:inline-block text-[10px] font-mono-code font-bold px-2 py-0.5 rounded-full bg-[#ff4e00]/20 text-[#ff4e00] border border-[#ff4e00]/30">
                   {isUsingFallbackTTS ? 'Web Speech Engine' : 'Gemini Pro TTS'}
                 </span>
               </h1>
               <p className="text-[11px] font-story italic text-white/50 -mt-0.5">
-                Atmospheric Spatial Audio & Nocturnal Soundscape
+                {currentStory.title.length > 40 ? `${currentStory.title.slice(0, 38)}...` : currentStory.title}
               </p>
             </div>
           </div>
@@ -399,17 +397,15 @@ export default function App() {
             <span className="md:hidden">Upload</span>
           </button>
 
-          {/* If custom book is active, offer quick reset to Pinocchio */}
-          {isCustomBook && (
-            <button
-              onClick={handleResetToPinocchio}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono-code text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
-              title="Return to original Pinocchio story"
-            >
-              <RotateCcw className="w-3 h-3 text-[#ff4e00]" />
-              <span>Pinocchio</span>
-            </button>
-          )}
+          {/* Library: switch between bundled books */}
+          <button
+            onClick={() => setIsBookUploadOpen(true)}
+            className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono-code text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
+            title="Choose a bundled book"
+          >
+            <BookOpen className="w-3 h-3 text-[#ff4e00]" />
+            <span>Library</span>
+          </button>
 
           {/* Soundscape settings */}
           <button
@@ -454,7 +450,7 @@ export default function App() {
             <div className="p-4 rounded-2xl glass-panel-subtle border border-white/10 space-y-2.5 shadow-xl">
               <div className="flex items-center justify-between">
                 <span className="px-2.5 py-0.5 rounded-full bg-[#ff4e00]/20 border border-[#ff4e00]/30 text-[10px] font-mono-code uppercase tracking-wider text-orange-400 font-bold">
-                  {isCustomBook ? 'Uploaded Book' : 'Original Tale'}
+                  {isCustomBook ? 'Uploaded Book' : 'Bundled Book'}
                 </span>
                 <span className="text-[10px] font-mono-code text-white/40">
                   {currentStory.chapters.length} Chapters
@@ -464,7 +460,7 @@ export default function App() {
                 {currentStory.title}
               </h3>
               <p className="text-xs text-white/60 font-story leading-relaxed line-clamp-3">
-                {currentStory.authorNote || currentStory.subtitle}
+                {currentStory.description || currentStory.subtitle}
               </p>
               <div className="pt-2 flex items-center justify-between text-[10px] uppercase font-mono-code text-white/40 border-t border-white/10">
                 <span>{isUsingFallbackTTS ? 'Browser Voice Engine' : 'Gemini Pro TTS'}</span>
@@ -491,10 +487,10 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2 text-orange-400 font-medium text-xs">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="capitalize">{currentChapter.ambientPreset.replace('-', ' ')}</span>
+                <span className="capitalize">{currentChapter.soundscape.replace('-', ' ')}</span>
               </div>
               <p className="text-[11px] text-white/45 leading-normal">
-                {AMBIENT_PRESET_DESCRIPTIONS[currentChapter.ambientPreset]}
+                {SOUNDSCAPE_DESCRIPTIONS[currentChapter.soundscape]}
               </p>
             </div>
           </div>
@@ -518,7 +514,7 @@ export default function App() {
             isFullStoryMode={isFullStoryMode}
             storyTitle={currentStory.title}
             storySubtitle={currentStory.subtitle}
-            authorNote={currentStory.authorNote}
+            authorNote={currentStory.description}
             totalChapters={currentStory.chapters.length}
             onParagraphClick={handleParagraphClick}
             onTogglePlay={handleTogglePlay}
@@ -552,13 +548,14 @@ export default function App() {
         onClose={() => setIsMixerOpen(false)}
         settings={settings}
         onUpdateSettings={setSettings}
+        hasBookTone={Boolean(currentStory.narration.tonePrompt)}
       />
 
       {/* Studio WAV Export Modal */}
       <ExportModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        chapters={currentStory.chapters}
+        book={currentStory}
         currentChapter={currentChapter}
         settings={settings}
       />
@@ -569,6 +566,7 @@ export default function App() {
         onClose={() => setIsBookUploadOpen(false)}
         onBookLoaded={handleBookLoaded}
         currentStoryTitle={currentStory.title}
+        bundledBooks={BUNDLED_BOOKS}
       />
     </div>
   );

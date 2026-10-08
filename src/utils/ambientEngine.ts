@@ -1,7 +1,8 @@
-import { AmbientSettings, Chapter } from '../types';
+import { AmbientSettings, Soundscape } from '../types';
+import { DEFAULT_SOUNDSCAPE } from '../../shared/bookConfig';
 import { audioBufferToWavBlob } from './audioUtils';
 
-export type AmbientPreset = Chapter['ambientPreset'];
+export type AmbientPreset = Soundscape;
 
 /**
  * A window of time within a rendered timeline that should be scored with a
@@ -75,7 +76,7 @@ interface PresetConfig {
   triggerProbability: number;
 }
 
-// --- night-rain: gentle rain on asphalt with occasional droplets ---
+// --- rain: gentle rain on asphalt with occasional droplets ---
 function buildNightRainBed(ctx: BaseAudioContext, output: AudioNode): AudioScheduledSourceNode[] {
   const source = ctx.createBufferSource();
   source.buffer = createPinkNoiseBuffer(ctx, 5, 0.035);
@@ -115,7 +116,7 @@ function scheduleRaindrop(ctx: BaseAudioContext, output: AudioNode, time: number
   osc.stop(time + 0.12);
 }
 
-// --- deep-lab: low electrical hum with a slow tremolo and rare crackles ---
+// --- electrical-hum: low electrical hum with a slow tremolo and rare crackles ---
 function buildDeepLabBed(ctx: BaseAudioContext, output: AudioNode): AudioScheduledSourceNode[] {
   const osc1 = ctx.createOscillator();
   osc1.type = 'sine';
@@ -177,7 +178,7 @@ function scheduleElectricalCrackle(ctx: BaseAudioContext, output: AudioNode, tim
   src.stop(time + 0.06);
 }
 
-// --- subtle-hum: barely-there room presence, no transients ---
+// --- room-tone: barely-there room presence, no transients ---
 function buildSubtleHumBed(ctx: BaseAudioContext, output: AudioNode): AudioScheduledSourceNode[] {
   const osc = ctx.createOscillator();
   osc.type = 'sine';
@@ -206,7 +207,7 @@ function buildSubtleHumBed(ctx: BaseAudioContext, output: AudioNode): AudioSched
   return [osc, noiseSource];
 }
 
-// --- late-office: fluorescent buzz, distant HVAC, occasional keyboard clacks ---
+// --- office: fluorescent buzz, distant HVAC, occasional keyboard clacks ---
 function buildLateOfficeBed(ctx: BaseAudioContext, output: AudioNode): AudioScheduledSourceNode[] {
   const buzz = ctx.createOscillator();
   buzz.type = 'sine';
@@ -267,7 +268,7 @@ function scheduleKeyboardClack(ctx: BaseAudioContext, output: AudioNode, time: n
   }
 }
 
-// --- empty-city: slow wind gusts with rare distant rumbles ---
+// --- city-night: slow wind gusts with rare distant rumbles ---
 function buildEmptyCityBed(ctx: BaseAudioContext, output: AudioNode): AudioScheduledSourceNode[] {
   const source = ctx.createBufferSource();
   source.buffer = createBrownNoiseBuffer(ctx, 6, 1.2, 0.035);
@@ -317,30 +318,30 @@ function scheduleDistantRumble(ctx: BaseAudioContext, output: AudioNode, time: n
 }
 
 const PRESET_CONFIGS: Record<AmbientPreset, PresetConfig> = {
-  'night-rain': {
+  rain: {
     buildBed: buildNightRainBed,
     scheduleTransient: scheduleRaindrop,
     tickSeconds: 0.5,
     triggerProbability: 0.35,
   },
-  'deep-lab': {
+  'electrical-hum': {
     buildBed: buildDeepLabBed,
     scheduleTransient: scheduleElectricalCrackle,
     tickSeconds: 6,
     triggerProbability: 0.25,
   },
-  'subtle-hum': {
+  'room-tone': {
     buildBed: buildSubtleHumBed,
     tickSeconds: 999,
     triggerProbability: 0,
   },
-  'late-office': {
+  office: {
     buildBed: buildLateOfficeBed,
     scheduleTransient: scheduleKeyboardClack,
     tickSeconds: 9,
     triggerProbability: 0.3,
   },
-  'empty-city': {
+  'city-night': {
     buildBed: buildEmptyCityBed,
     scheduleTransient: scheduleDistantRumble,
     tickSeconds: 10,
@@ -350,8 +351,8 @@ const PRESET_CONFIGS: Record<AmbientPreset, PresetConfig> = {
 
 /**
  * Ambient Soundscape and Audio Mastering Engine
- * Generates a distinct procedural soundscape per scene (night-rain, deep-lab,
- * subtle-hum, late-office, empty-city), crossfading between them as chapters
+ * Generates a distinct procedural soundscape per scene (rain, city-night,
+ * room-tone, electrical-hum, office), crossfading between them as chapters
  * change, mixed dynamically with narration for real-time listening and
  * offline WAV/MP3 export with the same scene-accurate soundscape changes.
  */
@@ -442,7 +443,7 @@ export class AtmosphericAudioEngine {
     this.isInitialized = true;
 
     if (!this.activePreset) {
-      this.setPreset('night-rain');
+      this.setPreset(DEFAULT_SOUNDSCAPE);
     }
   }
 

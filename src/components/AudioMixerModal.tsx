@@ -1,5 +1,6 @@
 import React from 'react';
-import { AmbientSettings } from '../types';
+import { AmbientSettings, VoiceName } from '../types';
+import { BOOK_TONE_ID, TONE_PRESETS, VOICES, VOICE_DESCRIPTIONS } from '../../shared/bookConfig';
 import { X, Sliders, CloudRain, Radio, Disc, Mic, Volume2, Sparkles } from 'lucide-react';
 
 interface AudioMixerModalProps {
@@ -7,6 +8,8 @@ interface AudioMixerModalProps {
   onClose: () => void;
   settings: AmbientSettings;
   onUpdateSettings: (newSettings: AmbientSettings) => void;
+  /** True when the current book supplies its own tone prompt */
+  hasBookTone?: boolean;
 }
 
 export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
@@ -14,21 +17,22 @@ export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
   onClose,
   settings,
   onUpdateSettings,
+  hasBookTone = false,
 }) => {
   if (!isOpen) return null;
 
   const presets = [
     {
-      name: '3:17 AM Rain',
-      desc: 'Gentle night street rain with light tape air',
+      name: 'Full Atmosphere',
+      desc: 'Prominent ambient soundscape with light tape air',
       settings: {
         rainVolume: 0.45,
         analogTapeWarmth: 0.2,
       },
     },
     {
-      name: 'Late Night Calm',
-      desc: 'Muted raindrops and subtle room presence',
+      name: 'Quiet Backdrop',
+      desc: 'Muted ambience and subtle room presence',
       settings: {
         rainVolume: 0.2,
         analogTapeWarmth: 0.15,
@@ -163,13 +167,14 @@ export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
             </label>
             <select
               value={settings.selectedVoice}
-              onChange={(e) => onUpdateSettings({ ...settings, selectedVoice: e.target.value as any })}
+              onChange={(e) => onUpdateSettings({ ...settings, selectedVoice: e.target.value as VoiceName })}
               className="w-full bg-white/5 border border-white/15 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#ff4e00] backdrop-blur-md cursor-pointer"
             >
-              <option value="Charon" className="bg-neutral-900 text-white">Charon (Quiet & Deep)</option>
-              <option value="Fenrir" className="bg-neutral-900 text-white">Fenrir (Somber & Resonant)</option>
-              <option value="Kore" className="bg-neutral-900 text-white">Kore (Calm & Clear)</option>
-              <option value="Zephyr" className="bg-neutral-900 text-white">Zephyr (Soft & Whispered)</option>
+              {VOICES.map((voice) => (
+                <option key={voice} value={voice} className="bg-neutral-900 text-white">
+                  {voice} ({VOICE_DESCRIPTIONS[voice]})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -179,12 +184,17 @@ export const AudioMixerModal: React.FC<AudioMixerModalProps> = ({
             </label>
             <select
               value={settings.tonePrompt}
-              onChange={(e) => onUpdateSettings({ ...settings, tonePrompt: e.target.value as any })}
+              onChange={(e) => onUpdateSettings({ ...settings, tonePrompt: e.target.value })}
               className="w-full bg-white/5 border border-white/15 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#ff4e00] backdrop-blur-md cursor-pointer"
             >
-              <option value="quiet-atmospheric" className="bg-neutral-900 text-white">Quiet & Atmospheric</option>
-              <option value="somber-nocturnal" className="bg-neutral-900 text-white">Somber Nocturnal</option>
-              <option value="measured-whisper" className="bg-neutral-900 text-white">Measured Whisper</option>
+              {hasBookTone && (
+                <option value={BOOK_TONE_ID} className="bg-neutral-900 text-white">Book Default</option>
+              )}
+              {Object.entries(TONE_PRESETS).map(([id, preset]) => (
+                <option key={id} value={id} className="bg-neutral-900 text-white">
+                  {preset.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>

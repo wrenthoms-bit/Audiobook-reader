@@ -1,29 +1,14 @@
 import JSZip from 'jszip';
 import { GoogleGenAI, Type } from '@google/genai';
-
-export interface ParsedParagraph {
-  id: string;
-  text: string;
-  speaker?: 'narrator' | 'ellis' | 'pino' | 'ruth' | 'halvard' | 'tom' | string;
-  isQuote?: boolean;
-}
-
-export interface ParsedChapter {
-  id: number;
-  title: string;
-  subtitle?: string;
-  paragraphs: ParsedParagraph[];
-  mood: string;
-  ambientPreset: 'night-rain' | 'deep-lab' | 'subtle-hum' | 'late-office' | 'empty-city';
-  estimatedDurationSeconds: number;
-}
-
-export interface ParsedStory {
-  title: string;
-  subtitle: string;
-  authorNote: string;
-  chapters: ParsedChapter[];
-}
+import {
+  BookConfig,
+  Chapter,
+  Paragraph,
+  SOUNDSCAPES,
+  TONE_PRESETS,
+  VOICES,
+  normalizeBookConfig,
+} from '../shared/bookConfig';
 
 /**
  * Strips HTML tags and decodes common entities
@@ -56,7 +41,7 @@ function stripHtml(html: string): string {
 /**
  * Splits raw text into paragraphs and marks quotes
  */
-function textToParagraphs(text: string, chapterId: number): ParsedParagraph[] {
+function textToParagraphs(text: string, chapterId: number): Paragraph[] {
   const rawParas = text
     .split(/\n\s*\n+/)
     .map((p) => p.trim())
@@ -76,7 +61,7 @@ function textToParagraphs(text: string, chapterId: number): ParsedParagraph[] {
 /**
  * Parses an EPUB file buffer into a structured Story object
  */
-export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise<ParsedStory> {
+export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise<BookConfig> {
   const zip = await JSZip.loadAsync(buffer);
 
   // 1. Locate container.xml to find the root OPF file path
@@ -151,15 +136,7 @@ export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise
     }
   }
 
-  const presets: ('night-rain' | 'deep-lab' | 'subtle-hum' | 'late-office' | 'empty-city')[] = [
-    'night-rain',
-    'empty-city',
-    'subtle-hum',
-    'deep-lab',
-    'late-office',
-  ];
-
-  const chapters: ParsedChapter[] = [];
+  const chapters: Chapter[] = [];
   let chapterIndex = 1;
 
   for (const path of chapterFiles) {
@@ -192,7 +169,7 @@ export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise
         subtitle: `Section ${chapterIndex}`,
         paragraphs,
         mood: 'Atmospheric narrative flow',
-        ambientPreset: presets[(chapterIndex - 1) % presets.length],
+        soundscape: SOUNDSCAPES[(chapterIndex - 1) % SOUNDSCAPES.length],
         estimatedDurationSeconds: Math.max(30, durationSeconds),
       });
 
@@ -205,12 +182,13 @@ export async function parseEpubBuffer(buffer: Buffer, fileName: string): Promise
     throw new Error('No readable text content found in EPUB file.');
   }
 
-  return {
+  return normalizeBookConfig({
     title,
+    author: author === 'Unknown Author' ? '' : author,
     subtitle: `By ${author}`,
-    authorNote: description || `Uploaded audiobook version of ${title}.`,
+    description: description || `Uploaded audiobook version of ${title}.`,
     chapters,
-  };
+  });
 }
 
 /**
@@ -239,7 +217,7 @@ function stripMarkdown(markdown: string): string {
  * Parses a Markdown file buffer into a structured Story object, using top-level
  * (# or ##) headings as chapter breaks when present.
  */
-export function parseMarkdownBuffer(buffer: Buffer, fileName: string): ParsedStory {
+export function parseMarkdownBuffer(buffer: Buffer, fileName: string): BookConfig {
   const rawMarkdown = buffer.toString('utf-8').replace(/\r\n/g, '\n');
   const title = fileName.replace(/\.(md|markdown)$/i, '').replace(/[-_]/g, ' ');
 
@@ -250,15 +228,7 @@ export function parseMarkdownBuffer(buffer: Buffer, fileName: string): ParsedSto
     if (match) headings.push({ lineIdx: idx, level: match[1].length, text: match[2].trim() });
   });
 
-  const presets: ParsedChapter['ambientPreset'][] = [
-    'night-rain',
-    'empty-city',
-    'subtle-hum',
-    'deep-lab',
-    'late-office',
-  ];
-
-  const chapters: ParsedChapter[] = [];
+  const chapters: Chapter[] = [];
 
   if (headings.length > 0) {
     for (let c = 0; c < headings.length; c++) {
@@ -274,7 +244,7 @@ export function parseMarkdownBuffer(buffer: Buffer, fileName: string): ParsedSto
         title: headings[c].text,
         subtitle: `Section ${c + 1}`,
         mood: 'Atmospheric narrative flow',
-        ambientPreset: presets[c % presets.length],
+        soundscape: SOUNDSCAPES[c % SOUNDSCAPES.length],
         estimatedDurationSeconds: Math.max(30, Math.round((wordCount / 130) * 60)),
         paragraphs,
       });
@@ -282,20 +252,20 @@ export function parseMarkdownBuffer(buffer: Buffer, fileName: string): ParsedSto
   }
 
   if (chapters.length === 0) {
-    return {
+    return normalizeBookConfig({
       title,
       subtitle: 'Imported Markdown Document',
-      authorNote: 'Audiobook ready for real-time Gemini Pro TTS narration.',
+      description: 'Audiobook ready for real-time Gemini Pro TTS narration.',
       chapters: splitTextIntoProceduralChapters(stripMarkdown(rawMarkdown), fileName),
-    };
+    });
   }
 
-  return {
+  return normalizeBookConfig({
     title,
     subtitle: 'Imported Markdown Document',
-    authorNote: 'Audiobook ready for real-time Gemini Pro TTS narration.',
+    description: 'Audiobook ready for real-time Gemini Pro TTS narration.',
     chapters,
-  };
+  });
 }
 
 /**
@@ -346,12 +316,16 @@ export async function structureBookWithGemini(
   ai: GoogleGenAI,
   rawTextOrPdfBase64: { isPdf?: boolean; base64?: string; text?: string },
   fileName: string
-): Promise<ParsedStory> {
+): Promise<BookConfig> {
   const systemPrompt = `You are a master audiobook producer. Your task is to analyze the provided book content and structure it into clean chapters and narrative paragraphs for real-time TTS narration.
 Output MUST be strictly valid JSON matching the requested schema.
 - Break the story into chapters (1 to 10 chapters depending on length).
-- For each chapter, provide title, subtitle, mood, ambientPreset (one of 'night-rain', 'deep-lab', 'subtle-hum', 'late-office', 'empty-city'), and paragraphs.
-- For each paragraph, provide a unique id, the cleaned text (no page numbers, no line breaks mid-sentence), and speaker.`;
+- Provide the book title, author (empty string if unknown), a short subtitle, and a one-sentence description.
+- List the main speaking characters. Give each a short lowercase id, a display name, and a voice (one of ${VOICES.join(', ')}) that suits them. Use different voices for characters who talk to each other where possible.
+- Choose narration.narratorVoice (one of ${VOICES.join(', ')}) and narration.tonePreset (one of ${Object.keys(TONE_PRESETS).join(', ')}) to suit the book.
+- Choose defaultSoundscape (one of ${SOUNDSCAPES.join(', ')}) as the book's overall ambience.
+- For each chapter, provide title, subtitle, mood, soundscape (one of ${SOUNDSCAPES.join(', ')}), and paragraphs.
+- For each paragraph, provide a unique id, the cleaned text (no page numbers, no line breaks mid-sentence), and speaker: 'narrator' for narration, or the id of the character speaking when the paragraph is mostly that character's dialogue.`;
 
   const contents: any[] = [];
   if (rawTextOrPdfBase64.isPdf && rawTextOrPdfBase64.base64) {
@@ -390,8 +364,29 @@ Output MUST be strictly valid JSON matching the requested schema.
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING },
+          author: { type: Type.STRING },
           subtitle: { type: Type.STRING },
-          authorNote: { type: Type.STRING },
+          description: { type: Type.STRING },
+          narration: {
+            type: Type.OBJECT,
+            properties: {
+              narratorVoice: { type: Type.STRING, description: `One of: ${VOICES.join(', ')}` },
+              tonePreset: { type: Type.STRING, description: `One of: ${Object.keys(TONE_PRESETS).join(', ')}` },
+            },
+          },
+          defaultSoundscape: { type: Type.STRING, description: `One of: ${SOUNDSCAPES.join(', ')}` },
+          characters: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                name: { type: Type.STRING },
+                voice: { type: Type.STRING, description: `One of: ${VOICES.join(', ')}` },
+              },
+              required: ['id', 'name', 'voice'],
+            },
+          },
           chapters: {
             type: Type.ARRAY,
             items: {
@@ -401,9 +396,9 @@ Output MUST be strictly valid JSON matching the requested schema.
                 title: { type: Type.STRING },
                 subtitle: { type: Type.STRING },
                 mood: { type: Type.STRING },
-                ambientPreset: {
+                soundscape: {
                   type: Type.STRING,
-                  description: "One of: 'night-rain', 'deep-lab', 'subtle-hum', 'late-office', 'empty-city'",
+                  description: `One of: ${SOUNDSCAPES.join(', ')}`,
                 },
                 estimatedDurationSeconds: { type: Type.INTEGER },
                 paragraphs: {
@@ -434,23 +429,16 @@ Output MUST be strictly valid JSON matching the requested schema.
     throw new Error('Empty response from Gemini AI during book structuring.');
   }
 
-  const parsed = JSON.parse(jsonText) as ParsedStory;
-  // Ensure presets are valid
-  const validPresets = ['night-rain', 'deep-lab', 'subtle-hum', 'late-office', 'empty-city'];
-  parsed.chapters = parsed.chapters.map((ch, idx) => ({
-    ...ch,
-    id: ch.id || idx + 1,
-    ambientPreset: validPresets.includes(ch.ambientPreset) ? ch.ambientPreset : 'night-rain',
-    estimatedDurationSeconds: ch.estimatedDurationSeconds || Math.max(45, (ch.paragraphs?.length || 5) * 12),
-  }));
-
-  return parsed;
+  // Validates voices, soundscapes and tone preset, and fills in any gaps
+  return normalizeBookConfig(JSON.parse(jsonText), {
+    fallbackTitle: fileName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+  });
 }
 
 /**
  * Procedurally splits raw book text into logical chapters if AI API is not active
  */
-export function splitTextIntoProceduralChapters(rawText: string, _fileName: string): ParsedChapter[] {
+export function splitTextIntoProceduralChapters(rawText: string, _fileName: string): Chapter[] {
   const clean = stripHtml(rawText);
   const rawParagraphs = clean
     .split(/\n\s*\n+/)
@@ -464,7 +452,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
         title: 'Chapter 1',
         subtitle: 'Opening Passage',
         mood: 'Atmospheric narrative flow',
-        ambientPreset: 'night-rain',
+        soundscape: 'rain',
         estimatedDurationSeconds: 60,
         paragraphs: [
           {
@@ -488,15 +476,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
     }
   });
 
-  const presets: ('night-rain' | 'deep-lab' | 'subtle-hum' | 'late-office' | 'empty-city')[] = [
-    'night-rain',
-    'empty-city',
-    'subtle-hum',
-    'deep-lab',
-    'late-office',
-  ];
-
-  const chapters: ParsedChapter[] = [];
+  const chapters: Chapter[] = [];
 
   if (chapterBreakIndices.length >= 2) {
     for (let c = 0; c < chapterBreakIndices.length; c++) {
@@ -505,7 +485,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
       const parasInChapter = rawParagraphs.slice(start + 1, end);
       if (parasInChapter.length === 0) continue;
 
-      const formattedParas: ParsedParagraph[] = parasInChapter.map((p, pIdx) => ({
+      const formattedParas: Paragraph[] = parasInChapter.map((p, pIdx) => ({
         id: `${c + 1}-${pIdx + 1}`,
         text: p,
         speaker: p.startsWith('"') || p.startsWith('“') ? 'speaker' : 'narrator',
@@ -519,7 +499,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
         title: chapterBreakIndices[c].title,
         subtitle: `Section ${c + 1}`,
         mood: 'Atmospheric narrative flow',
-        ambientPreset: presets[c % presets.length],
+        soundscape: SOUNDSCAPES[c % SOUNDSCAPES.length],
         estimatedDurationSeconds: Math.max(30, Math.round((totalWords / 130) * 60)),
         paragraphs: formattedParas,
       });
@@ -533,7 +513,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
 
     for (let c = 0; c < totalChapters; c++) {
       const slice = rawParagraphs.slice(c * parasPerChapter, (c + 1) * parasPerChapter);
-      const formattedParas: ParsedParagraph[] = slice.map((p, pIdx) => ({
+      const formattedParas: Paragraph[] = slice.map((p, pIdx) => ({
         id: `${c + 1}-${pIdx + 1}`,
         text: p,
         speaker: p.startsWith('"') || p.startsWith('“') ? 'speaker' : 'narrator',
@@ -547,7 +527,7 @@ export function splitTextIntoProceduralChapters(rawText: string, _fileName: stri
         title: `Chapter ${c + 1}`,
         subtitle: `Part ${c + 1}`,
         mood: 'Atmospheric narrative flow',
-        ambientPreset: presets[c % presets.length],
+        soundscape: SOUNDSCAPES[c % SOUNDSCAPES.length],
         estimatedDurationSeconds: Math.max(30, Math.round((totalWords / 130) * 60)),
         paragraphs: formattedParas,
       });

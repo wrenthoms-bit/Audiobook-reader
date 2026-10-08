@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Chapter, Paragraph, AmbientSettings } from '../types';
+import { BookConfig, Chapter, Paragraph, AmbientSettings, VoiceName } from '../types';
+import { resolveTonePrompt, toneLabel, voiceForParagraph } from '../../shared/bookConfig';
 import { atmosphericEngine, AmbientSegment } from '../utils/ambientEngine';
 import { synthesizeNarrationAudio, createAtmosphericFallbackAudioBuffer } from '../utils/ttsClient';
 import { audioBufferToWavBlob, audioBufferToMp3Blob, concatAudioBuffersWithOffsets, normalizeBuffersToMatchLoudness } from '../utils/audioUtils';
@@ -10,7 +11,7 @@ type ExportFormat = 'wav' | 'mp3';
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  chapters: Chapter[];
+  book: BookConfig;
   currentChapter: Chapter;
   settings: AmbientSettings;
 }
@@ -18,7 +19,7 @@ interface ExportModalProps {
 export const ExportModal: React.FC<ExportModalProps> = ({
   isOpen,
   onClose,
-  chapters,
+  book,
   currentChapter,
   settings,
 }) => {
@@ -33,6 +34,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [masteredBaseName, setMasteredBaseName] = useState('');
 
   if (!isOpen) return null;
+
+  const chapters = book.chapters;
+  const tonePrompt = resolveTonePrompt(settings.tonePrompt, book);
+  const fileSafe = (name: string) => name.trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || 'Audiobook';
 
   const encodeAndSetDownload = async (buffer: AudioBuffer, baseName: string, format: ExportFormat) => {
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -78,18 +83,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       let extraPadding = 3;
       let ambientSegments: AmbientSegment[];
 
-      // Synthesizes a run of paragraphs as one TTS call. If the API fails to
+      // Synthesizes a run of same-voice paragraphs as one TTS call. If the API fails to
       // return audio for the whole group (this happens occasionally for long
       // text — it's not quota exhaustion, since later chapters still succeed),
       // bisect the group and retry each half, isolating the failure to the
       // smallest possible section instead of losing the whole chapter to a
       // multi-minute placeholder drone.
-      const synthesizeTextGroup = async (paragraphs: Paragraph[], label: string): Promise<AudioBuffer> => {
+      const synthesizeTextGroup = async (paragraphs: Paragraph[], voice: VoiceName, label: string): Promise<AudioBuffer> => {
         const text = paragraphs.map((p) => p.text).join('\n\n');
         const result = await synthesizeNarrationAudio({
           text,
-          voice: settings.selectedVoice,
-          tone: settings.tonePrompt,
+          voice,
+          tonePrompt,
         });
 
         if (result.buffer) return result.buffer;
@@ -97,8 +102,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         if (paragraphs.length > 1) {
           setProgressText(`Retrying ${label} in smaller sections after a synthesis hiccup...`);
           const mid = Math.ceil(paragraphs.length / 2);
-          const firstBuffer = await synthesizeTextGroup(paragraphs.slice(0, mid), label);
-          const secondBuffer = await synthesizeTextGroup(paragraphs.slice(mid), label);
+          const firstBuffer = await synthesizeTextGroup(paragraphs.slice(0, mid), voice, label);
+          const secondBuffer = await synthesizeTextGroup(paragraphs.slice(mid), voice, label);
           const { buffer } = await concatAudioBuffersWithOffsets([firstBuffer, secondBuffer], 0.35, 44100);
           return buffer;
         }
@@ -107,24 +112,47 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         atmosphericEngine.init();
         const ctx = atmosphericEngine.getContext();
         if (ctx) {
-          return createAtmosphericFallbackAudioBuffer(ctx, text, settings.tonePrompt);
+          return createAtmosphericFallbackAudioBuffer(ctx, text, tonePrompt);
         }
         throw new Error(`Could not generate speech buffer for ${label}`);
       };
 
       const synthesizeChapter = async (chapter: Chapter, label: string): Promise<AudioBuffer> => {
-        const titleParagraph: Paragraph = { id: `${chapter.id}-title`, text: `${chapter.title}: ${chapter.subtitle}` };
-        return synthesizeTextGroup([titleParagraph, ...chapter.paragraphs], label);
+        const titleParagraph: Paragraph = {
+          id: `${chapter.id}-title`,
+          text: chapter.subtitle ? `${chapter.title}: ${chapter.subtitle}` : chapter.title,
+        };
+
+        // Batch consecutive paragraphs that share a voice, so character
+        // dialogue is rendered in the voice assigned in the book config.
+        const runs: { voice: VoiceName; paragraphs: Paragraph[] }[] = [];
+        for (const paragraph of [titleParagraph, ...chapter.paragraphs]) {
+          const voice = voiceForParagraph(book, paragraph, settings.selectedVoice);
+          const lastRun = runs[runs.length - 1];
+          if (lastRun && lastRun.voice === voice) {
+            lastRun.paragraphs.push(paragraph);
+          } else {
+            runs.push({ voice, paragraphs: [paragraph] });
+          }
+        }
+
+        const runBuffers: AudioBuffer[] = [];
+        for (const run of runs) {
+          runBuffers.push(await synthesizeTextGroup(run.paragraphs, run.voice, label));
+        }
+        if (runBuffers.length === 1) return runBuffers[0];
+        const { buffer } = await concatAudioBuffersWithOffsets(runBuffers, 0.35, 44100);
+        return buffer;
       };
 
       if (exportScope === 'current') {
         setProgressText(`Synthesizing narration for ${currentChapter.title}...`);
         speechBuffer = await synthesizeChapter(currentChapter, currentChapter.title);
 
-        baseName = `Pinocchio_${currentChapter.title.replace(/\s+/g, '_')}_Master`;
+        baseName = `${fileSafe(book.title)}_${fileSafe(currentChapter.title)}_Master`;
         const totalDuration = speechBuffer.duration + extraPadding;
         ambientSegments = [
-          { preset: currentChapter.ambientPreset, startTime: 0.8, duration: Math.max(0.5, totalDuration - 0.8) },
+          { preset: currentChapter.soundscape, startTime: 0.8, duration: Math.max(0.5, totalDuration - 0.8) },
         ];
       } else {
         // Full Audiobook: synthesize each chapter individually so its own
@@ -144,13 +172,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         extraPadding = 5;
         speechBuffer = combinedSpeech;
-        baseName = 'Pinocchio_Complete_Atmospheric_Audiobook_Master';
+        baseName = `${fileSafe(book.title)}_Complete_Audiobook_Master`;
 
         const totalDuration = combinedSpeech.duration + extraPadding;
         ambientSegments = chapters.map((ch, i) => {
           const start = offsets[i] + 0.8;
           const end = i < chapters.length - 1 ? offsets[i + 1] + 0.8 : totalDuration;
-          return { preset: ch.ambientPreset, startTime: start, duration: Math.max(0.5, end - start) };
+          return { preset: ch.soundscape, startTime: start, duration: Math.max(0.5, end - start) };
         });
       }
 
@@ -291,13 +319,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <span>Ambient Soundscape:</span>
             <span className="text-orange-400 font-medium capitalize">
               {exportScope === 'current'
-                ? currentChapter.ambientPreset.replace('-', ' ')
+                ? currentChapter.soundscape.replace('-', ' ')
                 : 'Multi-Scene (per chapter)'}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Voice Tone:</span>
-            <span className="text-orange-300 capitalize">{settings.tonePrompt.replace('-', ' ')}</span>
+            <span className="text-orange-300">{toneLabel(settings.tonePrompt)}</span>
           </div>
         </div>
 

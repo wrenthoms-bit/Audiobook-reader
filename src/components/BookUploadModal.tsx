@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Story } from '../types';
+import { BookConfig } from '../types';
+import { normalizeBookConfig } from '../../shared/bookConfig';
 import {
   UploadCloud,
   FileText,
@@ -16,8 +17,9 @@ import {
 interface BookUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBookLoaded: (newStory: Story) => void;
+  onBookLoaded: (book: BookConfig) => void;
   currentStoryTitle: string;
+  bundledBooks?: BookConfig[];
 }
 
 export const BookUploadModal: React.FC<BookUploadModalProps> = ({
@@ -25,6 +27,7 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
   onClose,
   onBookLoaded,
   currentStoryTitle,
+  bundledBooks = [],
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -64,8 +67,8 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
     setErrorMessage(null);
     setStatusMessage(null);
     const name = file.name.toLowerCase();
-    if (!name.endsWith('.pdf') && !name.endsWith('.epub') && !name.endsWith('.md') && !name.endsWith('.markdown')) {
-      setErrorMessage('Please select a valid PDF (.pdf), EPUB (.epub), or Markdown (.md) document.');
+    if (!/\.(pdf|epub|md|markdown|json)$/.test(name)) {
+      setErrorMessage('Please select a valid PDF (.pdf), EPUB (.epub), Markdown (.md), or book config (.json) file.');
       return;
     }
 
@@ -99,8 +102,22 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
     setStatusMessage('Reading file data...');
 
     try {
-      const base64Data = await fileToBase64(selectedFile);
       const lowerName = selectedFile.name.toLowerCase();
+
+      // Book config files are already in the app's format: load them directly
+      if (lowerName.endsWith('.json')) {
+        const book = normalizeBookConfig(JSON.parse(await selectedFile.text()), {
+          fallbackTitle: selectedFile.name.replace(/(\.book)?\.json$/i, ''),
+        });
+        setStatusMessage(`Complete! Loaded ${book.chapters.length} chapters.`);
+        setTimeout(() => {
+          onBookLoaded(book);
+          onClose();
+        }, 600);
+        return;
+      }
+
+      const base64Data = await fileToBase64(selectedFile);
       const isPdf = lowerName.endsWith('.pdf');
       const isMarkdown = lowerName.endsWith('.md') || lowerName.endsWith('.markdown');
       const fileType = isPdf ? 'pdf' : isMarkdown ? 'markdown' : 'epub';
@@ -125,13 +142,14 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
 
       const data = await res.json();
 
-      if (!res.ok || !data.success || !data.story) {
+      if (!res.ok || !data.success || !data.book) {
         throw new Error(data.error || 'Failed to parse book content.');
       }
 
-      setStatusMessage(`Complete! Loaded ${data.story.chapters.length} chapters.`);
+      const book = normalizeBookConfig(data.book, { fallbackTitle: selectedFile.name });
+      setStatusMessage(`Complete! Loaded ${book.chapters.length} chapters.`);
       setTimeout(() => {
-        onBookLoaded(data.story);
+        onBookLoaded(book);
         onClose();
       }, 600);
     } catch (err: any) {
@@ -162,7 +180,7 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-white/50 font-serif italic -mt-0.5">
-                Upload any PDF, EPUB, or Markdown file to listen with real-time narration and ambient soundscapes
+                Upload any PDF, EPUB, Markdown, or book config file to listen with real-time narration and ambient soundscapes
               </p>
             </div>
           </div>
@@ -185,6 +203,33 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
           </span>
         </div>
 
+        {/* Bundled books */}
+        {bundledBooks.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-mono-code uppercase tracking-widest text-white/50">
+              Bundled Books
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {bundledBooks.map((book) => (
+                <button
+                  key={book.id}
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => {
+                    onBookLoaded(book);
+                    onClose();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel-interactive border border-white/15 text-xs text-white/80 hover:text-white transition"
+                  title={book.author ? `${book.title} by ${book.author}` : book.title}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-[#ff4e00]" />
+                  <span className="truncate max-w-[180px]">{book.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Drag & Drop Zone */}
         <div
           onDragEnter={handleDrag}
@@ -203,7 +248,7 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.epub,.md,.markdown"
+            accept=".pdf,.epub,.md,.markdown,.json"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -221,6 +266,8 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
                     ? 'PDF Document'
                     : selectedFile.name.toLowerCase().endsWith('.md') || selectedFile.name.toLowerCase().endsWith('.markdown')
                     ? 'Markdown Document'
+                    : selectedFile.name.toLowerCase().endsWith('.json')
+                    ? 'Book Config'
                     : 'EPUB eBook'}
                 </p>
               </div>

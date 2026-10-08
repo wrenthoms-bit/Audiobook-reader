@@ -1,5 +1,6 @@
 import React from 'react';
 import { Chapter, AmbientSettings } from '../types';
+import { toneLabel } from '../../shared/bookConfig';
 import { AudioVisualizer } from './AudioVisualizer';
 import {
   Play,
@@ -116,7 +117,7 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
                 <span className="text-white/20">•</span>
                 <span>{settings.selectedVoice}</span>
                 <span className="text-white/20">•</span>
-                <span className="capitalize">{settings.tonePrompt.replace('-', ' ')}</span>
+                <span>{toneLabel(settings.tonePrompt)}</span>
               </div>
             </div>
           </div>
@@ -167,7 +168,7 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
               {settings.playbackRate}x
             </button>
 
-            {/* Ambient Rain Quick Toggle */}
+            {/* Ambient Soundscape Quick Toggle */}
             <button
               onClick={toggleRainMute}
               className={`p-2 rounded-lg border transition ${
@@ -175,7 +176,7 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
                   ? 'bg-[#ff4e00]/20 border-[#ff4e00]/40 text-orange-400'
                   : 'glass-panel-subtle border-white/10 text-white/40 hover:text-white/70'
               }`}
-              title={settings.rainVolume > 0 ? 'Rain soundscape active' : 'Rain soundscape muted'}
+              title={settings.rainVolume > 0 ? 'Ambient soundscape active' : 'Ambient soundscape muted'}
             >
               <CloudRain className="w-4 h-4" />
             </button>
