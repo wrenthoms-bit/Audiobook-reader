@@ -28,6 +28,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [exportScope, setExportScope] = useState<'current' | 'full'>('current');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
+  const [includeTitle, setIncludeTitle] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [progressText, setProgressText] = useState('');
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -40,6 +41,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const chapters = book.chapters;
   const tonePrompt = resolveTonePrompt(settings.tonePrompt, book);
+  // Short spoken introduction: the book title, then its subtitle or author
+  const endSentence = (value: string) => (/[.!?]$/.test(value) ? value : `${value}.`);
+  const titleIntroText = [book.title, book.subtitle || (book.author ? `By ${book.author}` : '')]
+    .filter(Boolean)
+    .map(endSentence)
+    .join(' ');
+
   const fileSafe = (name: string) => name.trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || 'Audiobook';
 
   const encodeAndSetDownload = async (buffer: AudioBuffer, baseName: string, format: ExportFormat) => {
@@ -164,9 +172,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         return buffer;
       };
 
+      // Optional book title read by the narrator before the first chapter
+      let titleBuffer: AudioBuffer | null = null;
+      if (includeTitle) {
+        setProgressText('Synthesizing the book title...');
+        titleBuffer = await synthesizeTextGroup(
+          [{ id: 'book-title', text: titleIntroText }],
+          settings.selectedVoice,
+          'the book title'
+        );
+      }
+
       if (exportScope === 'current') {
         setProgressText(`Synthesizing narration for ${currentChapter.title}...`);
         speechBuffer = await synthesizeChapter(currentChapter, currentChapter.title);
+        if (titleBuffer) {
+          const { buffer } = await concatAudioBuffersWithOffsets([titleBuffer, speechBuffer], 1.4, 44100);
+          speechBuffer = buffer;
+        }
 
         baseName = `${fileSafe(book.title)}_${fileSafe(currentChapter.title)}_Master`;
         const totalDuration = speechBuffer.duration + extraPadding;
@@ -183,11 +206,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           chapterBuffers.push(await synthesizeChapter(ch, `Chapter ${ch.id}`));
         }
 
+        // The title read, when included, sits ahead of the first chapter
+        const introCount = titleBuffer ? 1 : 0;
+        const speechBuffers = titleBuffer ? [titleBuffer, ...chapterBuffers] : chapterBuffers;
+
         setProgressText('Leveling narration loudness across chapters...');
-        normalizeBuffersToMatchLoudness(chapterBuffers);
+        normalizeBuffersToMatchLoudness(speechBuffers);
 
         setProgressText('Assembling chapters into a continuous narrative...');
-        const { buffer: combinedSpeech, offsets } = await concatAudioBuffersWithOffsets(chapterBuffers, 1.4, 44100);
+        const { buffer: combinedSpeech, offsets } = await concatAudioBuffersWithOffsets(speechBuffers, 1.4, 44100);
 
         extraPadding = 5;
         speechBuffer = combinedSpeech;
@@ -195,8 +222,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         const totalDuration = combinedSpeech.duration + extraPadding;
         ambientSegments = chapters.map((ch, i) => {
-          const start = offsets[i] + 0.8;
-          const end = i < chapters.length - 1 ? offsets[i + 1] + 0.8 : totalDuration;
+          // The first chapter's soundscape also plays under the title read
+          const start = i === 0 ? 0.8 : offsets[i + introCount] + 0.8;
+          const end = i < chapters.length - 1 ? offsets[i + 1 + introCount] + 0.8 : totalDuration;
           return { preset: ch.soundscape, startTime: start, duration: Math.max(0.5, end - start) };
         });
       }
@@ -281,10 +309,29 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               }`}
             >
               <div className="text-xs font-semibold text-white">Complete Book</div>
-              <div className="text-[11px] text-white/50 font-serif italic">All 7 Parts Mastered</div>
+              <div className="text-[11px] text-white/50 font-serif italic">All {chapters.length} {chapters.length === 1 ? 'Chapter' : 'Chapters'} Mastered</div>
             </button>
           </div>
         </div>
+
+        {/* Title Read Option */}
+        <label className="flex items-start gap-3 p-3 rounded-xl glass-panel-subtle border border-white/10 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includeTitle}
+            disabled={isExporting}
+            onChange={(e) => {
+              setIncludeTitle(e.target.checked);
+              setDownloadUrl(null);
+              setMasteredBuffer(null);
+            }}
+            className="mt-0.5 accent-[#ff4e00] cursor-pointer"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-white">Read the book title at the start</span>
+            <span className="block text-[11px] text-white/50 font-serif italic truncate">"{titleIntroText}"</span>
+          </span>
+        </label>
 
         {/* Format Selector */}
         <div className="space-y-2">
