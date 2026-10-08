@@ -15,6 +15,8 @@ import { AudioControls } from './components/AudioControls';
 import { AudioMixerModal } from './components/AudioMixerModal';
 import { ExportModal } from './components/ExportModal';
 import { BookUploadModal } from './components/BookUploadModal';
+import { LibraryModal } from './components/LibraryModal';
+import { deleteSavedBook, getLastBookId, listSavedBooks, saveBook, setLastBookId } from './utils/bookStore';
 import {
   BookOpen,
   Volume2,
@@ -42,6 +44,9 @@ export default function App() {
   const [isMixerOpen, setIsMixerOpen] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
   const [isBookUploadOpen, setIsBookUploadOpen] = useState<boolean>(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  // Uploaded books saved in this browser (IndexedDB)
+  const [savedBooks, setSavedBooks] = useState<BookConfig[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   // Mixer & Soundscape Settings (clean speech + gentle rain & tape warmth)
@@ -284,6 +289,39 @@ export default function App() {
       selectedVoice: book.narration.narratorVoice,
       tonePrompt: initialToneId(book),
     }));
+    setLastBookId(book.id);
+  };
+
+  // Load saved books on startup and reopen whichever book was open last
+  useEffect(() => {
+    let cancelled = false;
+    listSavedBooks().then((books) => {
+      if (cancelled) return;
+      setSavedBooks(books);
+      const lastId = getLastBookId();
+      const lastBook = lastId && [...books, ...BUNDLED_BOOKS].find((b) => b.id === lastId);
+      if (lastBook && lastBook !== DEFAULT_BOOK) handleBookLoaded(lastBook);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A newly uploaded book is saved to the browser, then opened
+  const handleBookUploaded = (uploaded: BookConfig) => {
+    // Keep ids distinct from bundled books so both can sit in the library
+    const book = BUNDLED_BOOKS.some((b) => b.id === uploaded.id)
+      ? { ...uploaded, id: `${uploaded.id}-uploaded` }
+      : uploaded;
+    setSavedBooks((prev) => [book, ...prev.filter((b) => b.id !== book.id)]);
+    saveBook(book);
+    handleBookLoaded(book);
+  };
+
+  const handleDeleteBook = (book: BookConfig) => {
+    setSavedBooks((prev) => prev.filter((b) => b.id !== book.id));
+    deleteSavedBook(book.id);
+    if (currentStory.id === book.id) handleBookLoaded(DEFAULT_BOOK);
   };
 
   // Navigation handlers
@@ -408,14 +446,14 @@ export default function App() {
             <span className="md:hidden">Upload</span>
           </button>
 
-          {/* Library: switch between bundled books */}
+          {/* Library: switch between saved and bundled books */}
           <button
-            onClick={() => setIsBookUploadOpen(true)}
-            className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono-code text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
-            title="Choose a bundled book"
+            onClick={() => setIsLibraryOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono-code text-white/80 hover:text-white glass-panel-interactive rounded-lg transition"
+            title="Open your library"
           >
-            <BookOpen className="w-3 h-3 text-[#ff4e00]" />
-            <span>Library</span>
+            <BookOpen className="w-3.5 h-3.5 text-[#ff4e00]" />
+            <span className="hidden lg:inline">Library</span>
           </button>
 
           {/* Soundscape settings */}
@@ -575,9 +613,20 @@ export default function App() {
       <BookUploadModal
         isOpen={isBookUploadOpen}
         onClose={() => setIsBookUploadOpen(false)}
-        onBookLoaded={handleBookLoaded}
+        onBookLoaded={handleBookUploaded}
         currentStoryTitle={currentStory.title}
+      />
+
+      {/* Library: saved and bundled books */}
+      <LibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
         bundledBooks={BUNDLED_BOOKS}
+        savedBooks={savedBooks}
+        currentBookId={currentStory.id}
+        onSelectBook={handleBookLoaded}
+        onDeleteBook={handleDeleteBook}
+        onOpenUpload={() => setIsBookUploadOpen(true)}
       />
     </div>
   );

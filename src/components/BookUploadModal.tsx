@@ -19,7 +19,6 @@ interface BookUploadModalProps {
   onClose: () => void;
   onBookLoaded: (book: BookConfig) => void;
   currentStoryTitle: string;
-  bundledBooks?: BookConfig[];
 }
 
 export const BookUploadModal: React.FC<BookUploadModalProps> = ({
@@ -27,7 +26,6 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
   onClose,
   onBookLoaded,
   currentStoryTitle,
-  bundledBooks = [],
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -203,32 +201,6 @@ export const BookUploadModal: React.FC<BookUploadModalProps> = ({
           </span>
         </div>
 
-        {/* Bundled books */}
-        {bundledBooks.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-mono-code uppercase tracking-widest text-white/50">
-              Bundled Books
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {bundledBooks.map((book) => (
-                <button
-                  key={book.id}
-                  type="button"
-                  disabled={isProcessing}
-                  onClick={() => {
-                    onBookLoaded(book);
-                    onClose();
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel-interactive border border-white/15 text-xs text-white/80 hover:text-white transition"
-                  title={book.author ? `${book.title} by ${book.author}` : book.title}
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-[#ff4e00]" />
-                  <span className="truncate max-w-[180px]">{book.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Drag & Drop Zone */}
         <div
