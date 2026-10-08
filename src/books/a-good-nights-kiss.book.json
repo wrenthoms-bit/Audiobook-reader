@@ -1,0 +1,447 @@
+{
+  "formatVersion": 1,
+  "id": "a-good-nights-kiss",
+  "title": "A Good Night's Kiss",
+  "author": "",
+  "subtitle": "A short story adapted from the screenplay by Delrogue",
+  "description": "A father waits with a ticket in one hand and something he has forgotten in the other.",
+  "narration": {
+    "narratorVoice": "Charon",
+    "tonePreset": "quiet-atmospheric",
+    "tonePrompt": "Read as a quiet, intimate literary short story: gentle and unhurried, with restrained emotion and small natural pauses. Spoken dialogue should sound natural and understated, never theatrical."
+  },
+  "defaultSoundscape": "room-tone",
+  "characters": [
+    {
+      "id": "arthur",
+      "name": "Arthur",
+      "voice": "Algenib"
+    },
+    {
+      "id": "maya",
+      "name": "Maya",
+      "voice": "Achernar"
+    },
+    {
+      "id": "clerk",
+      "name": "The Clerk",
+      "voice": "Schedar"
+    },
+    {
+      "id": "son-in-law",
+      "name": "Son-in-law",
+      "voice": "Puck"
+    }
+  ],
+  "chapters": [
+    {
+      "id": 1,
+      "title": "The Archive",
+      "paragraphs": [
+        {
+          "id": "1-1",
+          "text": "The ticket said 4180.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-2",
+          "text": "Arthur had been holding it long enough that the paper had gone soft at the corners. Up on the wall, the red digital display read 4176, and it had read 4176 for what felt like a very long time.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-3",
+          "text": "The waiting room was the kind every city builds and nobody designs. Fluorescent tubes hummed overhead, one of them flickering faintly at the far end, as if it hadn't quite made up its mind. Under the window, an old air conditioner rattled quietly to itself. The notice boards had been pinned and re-pinned so many times that the papers overlapped like roof tiles, all faded to the same tired blue, and Arthur doubted anyone knew which of them still applied. Outside, thin Perth daylight lay against the glass.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-4",
+          "text": "He sat in a dark vinyl chair with his left leg half-crossed over his right knee, the way he had sat in waiting rooms all his life. His right hand held the ticket. His left hand was buried deep in his jacket pocket, where it had been since he arrived, though he couldn't have told you why.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-5",
+          "text": "The jacket was waxed cotton, dark, worn pale at the cuffs and along the edges of the pockets. He'd had it twenty-five years. His daughter had suggested, more than once and with great tact, that it might be time to let it go. He never had.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-6",
+          "text": "A dull electronic chime. The display ticked over. 4180.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-7",
+          "text": "Behind the counter, the clerk didn't look up. He was a young man in a navy zip fleece, a lanyard around his neck, his face lit grey by a screen.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-8",
+          "text": "\"Ticket 4180.\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-9",
+          "text": "Arthur stood, crossed the scuffed linoleum, and slid the ticket across the laminate. The clerk scanned it without a word. Then came the typing: heavy, mechanical keystrokes, the sound of a keyboard far older than it had any right to be.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-10",
+          "text": "\"Sixteenth of August, 2011,\" the clerk read. \"Cafe query. After-school time. Marked 'random Tuesday' by your baseline optimisation. Low-utility.\" He glanced up. \"You're sure you want the restore? It's heavily compressed.\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-11",
+          "text": "\"Yes.\"",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "1-12",
+          "text": "The clerk tapped a key. Three small desktop monitors, none of them matching, swivelled on the counter to face Arthur. They flickered, steadied, and filled with the same rainy afternoon.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-13",
+          "text": "A suburban cafe. Rain on the window. A man in a dark jacket sat at a small table, and across from him sat a girl of about six, a yellow raincoat hanging off the back of her chair, working her way through a slice of chocolate cake on a small porcelain plate. Behind the counter, a barista wiped down the coffee machine and paid them no attention at all.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-14",
+          "text": "It was Arthur, of course. A younger Arthur. And the girl was Maya.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-15",
+          "text": "But each screen told it differently. On the first monitor, everything was clinical and smooth, the faces waxy and flawless, like a photograph retouched until nothing human was left in it. The second monitor glowed. It was warm and golden and soft at the edges, the rain turned to glitter, the light pouring in like honey. It looked like a memory the way an advertisement looks like a memory.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-16",
+          "text": "The third monitor was broken. Whenever anyone in the picture moved, their face dissolved into grey blocks, stuttering squares of nothing. Maya's face came and went. His own came and went. And yet the room around them was perfectly sharp. The rain running down the glass. The steam curling up from a cup of coffee. The dark crumb of the cake on the edge of the plate. All of it was crisp and clear, as if the world had been kept, and only the people had been lost.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-17",
+          "text": "\"Because of data degradation, the system runs synthesis algorithms,\" the clerk said, in the voice of a man who had said it many times before. \"Option one is optimised for visual clarity. Mostly algorithmic guesswork. Option two is an emotional composite; it prioritises warmth. Option three is raw, uncorrected compression noise.\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-18",
+          "text": "He looked up then, and seemed to notice how still Arthur had gone.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-19",
+          "text": "\"Can I ask what you're trying to find? It helps adjust the render parameters.\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-20",
+          "text": "Arthur didn't take his eyes off the third screen.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-21",
+          "text": "\"Scent,\" he said.",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "1-22",
+          "text": "The clerk paused. When he spoke again, there was no expression in it at all.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-23",
+          "text": "\"Scent is highly volatile in cold storage, Mr Fulton. We can't digitalise olfactory data.\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-24",
+          "text": "Arthur nodded slowly, as though he'd known that all along. Then he drew his left hand out of his jacket pocket and rested it on the counter, fingers loosely curled around something beneath his palm. He didn't look at it.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-25",
+          "text": "\"My daughter,\" he said. \"She's a perfumer now. She makes this fragrance called A Good Night's Kiss. She told me she started it because of this day.\"",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "1-26",
+          "text": "The clerk said nothing. He listened.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-27",
+          "text": "\"She says we were in this cafe, it was raining, and we were having cake after school. As we got up to leave, I helped her with her coat and kissed her on the forehead. She says the smell of that moment...\" He stopped, and found the words again. \"The rain on my damp coat. The coffee. The sweet cake. She said that kiss was the spark for everything she became. And I...\"",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "1-28",
+          "text": "He shook his head, only slightly. Something ached in the movement. A sheen of tears had come into his eyes, and he held them there, and did not let them fall.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-29",
+          "text": "\"My software told me it was a nothing Tuesday,\" he said. \"I deleted the cornerstone of her childhood to free up mental space. I don't even remember the smell.\"",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "1-30",
+          "text": "Silence settled over the counter. Even the lights seemed to hum more quietly.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-31",
+          "text": "The clerk's eyes moved from Arthur's face down to Arthur's hand. The fingers had relaxed a little while he spoke, and between them something showed: heavy fluted glass, a deep emerald-teal, and a matte green cap.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-32",
+          "text": "The clerk looked up again. Something in his flat, administrative face had softened into a kind of quiet bewilderment.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-33",
+          "text": "\"Mr Fulton,\" he said. \"Why are you trying to retrieve this part of the memory anyway?\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-34",
+          "text": "Arthur looked at him.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-35",
+          "text": "\"Aren't you holding it in your hand already?\"",
+          "speaker": "clerk",
+          "isQuote": true
+        },
+        {
+          "id": "1-36",
+          "text": "Arthur looked down.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-37",
+          "text": "Resting in his palm was a small ribbed bottle of teal glass and gold, with a crisp white label. He knew the words on it without needing to read them. A Good Night's Kiss. Eau de Parfum. Made in Perth, Western Australia.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-38",
+          "text": "When he looked up, the clerk was gone.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-39",
+          "text": "The counter was bare. The monitors were gone, and the keyboard, and the papers, as though none of it had ever been there.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "1-40",
+          "text": "And the hum of the lights stopped, all at once, and left nothing behind it but silence.",
+          "speaker": "narrator"
+        }
+      ],
+      "mood": "Fluorescent hum, a ticket number, a counter that should not be there",
+      "soundscape": "office",
+      "estimatedDurationSeconds": 522
+    },
+    {
+      "id": 2,
+      "title": "The Waiting Room",
+      "paragraphs": [
+        {
+          "id": "2-1",
+          "text": "It was night.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-2",
+          "text": "The same chairs. The same green notice board. The same high window, except that beyond the glass there was no daylight now, only a black so complete it turned the window into a mirror.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-3",
+          "text": "The notices on the board had changed, or else he was finally seeing them properly. Prenatal clinic times. Newborn screening information. Visiting hours for the maternity ward. And where the counter had stood, there was only wall.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-4",
+          "text": "In place of the buzzing lights came the ordinary sounds of a hospital at night: the squeak of shoe rubber on vinyl, the rattle of a metal cart being wheeled somewhere out of sight, voices murmuring far down a corridor.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-5",
+          "text": "Arthur sat alone in the vinyl chair, leaning forward, elbows on his knees, looking down into his open palm.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-6",
+          "text": "The bottle was still there.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-7",
+          "text": "There was no one else in his row. There had been no archive, no ticket, no clerk. There had only been the waiting, and the long hours, and the mind of a tired father wandering wherever it liked while he sat in the dark.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-8",
+          "text": "He turned the bottle gently with his thumb, feeling the ridges of the glass. Then, slowly, he eased the heavy green cap from its collar.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-9",
+          "text": "He didn't spray it. He only lifted the open bottle to just beneath his nose, closed his eyes, and breathed in, slow and deep.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-10",
+          "text": "Rain on waxed cotton. Coffee. Something dark and sweet, like chocolate. And underneath it all, something he had no name for, something that might simply have been the feeling of a small girl being helped into her coat.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-11",
+          "text": "He didn't remember the Tuesday. He understood now that he didn't need to. She had kept it for both of them.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-12",
+          "text": "Down the corridor, a set of double doors clicked open.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-13",
+          "text": "Arthur's eyes opened.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-14",
+          "text": "His son-in-law stepped into the waiting area in a grey hoodie, a plastic wristband on one wrist, his hair a mess. He looked as though he hadn't slept in a week. But a huge grin was breaking across his face, tears and all, and when he caught Arthur's eye it only grew.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-15",
+          "text": "\"Arthur,\" he said. \"It's a girl. They're both doing well.\"",
+          "speaker": "son-in-law",
+          "isQuote": true
+        },
+        {
+          "id": "2-16",
+          "text": "Arthur stood, slowly. His shoulders dropped. His hands were trembling a little, and he let go of a breath he felt he'd been holding for hours.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-17",
+          "text": "Without taking his eyes off his son-in-law, he slipped the bottle into his jacket pocket, the same pocket where the ticket had been, and stepped forward.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "2-18",
+          "text": "\"Good,\" he said softly. \"That's good.\"",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "2-19",
+          "text": "And the two men turned and went through the double doors together, toward the ward.",
+          "speaker": "narrator"
+        }
+      ],
+      "mood": "A hospital at night, a tired father, a small bottle",
+      "soundscape": "room-tone",
+      "estimatedDurationSeconds": 202
+    },
+    {
+      "id": 3,
+      "title": "The Room",
+      "paragraphs": [
+        {
+          "id": "3-1",
+          "text": "The room was quiet and dimly lit.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-2",
+          "text": "Maya was propped up in the bed, holding a tiny newborn wrapped in a white hospital blanket. She looked pale and wrung out, emptied by the long night, and at the same time more completely present than Arthur had ever seen her.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-3",
+          "text": "He came to the bedside slowly. Whatever was left of the night's hardness went out of his face. He looked at his daughter, and then down at the small bundle in her arms.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-4",
+          "text": "\"Hey, chicken,\" he whispered.",
+          "speaker": "arthur",
+          "isQuote": true
+        },
+        {
+          "id": "3-5",
+          "text": "Maya looked up. Her voice, when it came, was hoarse and quiet.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-6",
+          "text": "\"Hey, Dad. Come meet her.\"",
+          "speaker": "maya",
+          "isQuote": true
+        },
+        {
+          "id": "3-7",
+          "text": "Arthur leaned over the edge of the bed, the old jacket rustling softly against the sheets. For a long moment he only watched the baby: the impossibly small face, the closed eyes, the tiny working mouth.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-8",
+          "text": "Then he leaned down and, gently, pressed his lips to Maya's forehead. The same way, he supposed, that he had done it once before, on a rainy Tuesday afternoon he could no longer remember.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-9",
+          "text": "He drew back. His eyes caught the low light of the room.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-10",
+          "text": "Maya looked up at him, and a faint smile pulled at the corner of her mouth as she breathed him in.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-11",
+          "text": "\"You still smell like rain, Dad,\" she said softly.",
+          "speaker": "maya",
+          "isQuote": true
+        },
+        {
+          "id": "3-12",
+          "text": "Arthur looked at her. Then he looked down at his granddaughter. He didn't say anything at all.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-13",
+          "text": "On the bedside table, beside a plastic water jug and a little stack of hospital paperwork, sat a small fluted bottle of emerald glass and gold.",
+          "speaker": "narrator"
+        },
+        {
+          "id": "3-14",
+          "text": "A Good Night's Kiss.",
+          "speaker": "narrator"
+        }
+      ],
+      "mood": "Dim, quiet, tender",
+      "soundscape": "room-tone",
+      "estimatedDurationSeconds": 121
+    }
+  ]
+}

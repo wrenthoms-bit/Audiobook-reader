@@ -6,17 +6,41 @@
 
 export const BOOK_FORMAT_VERSION = 1;
 
-// Gemini prebuilt TTS voices the app offers
-export const VOICES = ['Charon', 'Fenrir', 'Kore', 'Puck', 'Zephyr'] as const;
-export type VoiceName = (typeof VOICES)[number];
-
-export const VOICE_DESCRIPTIONS: Record<VoiceName, string> = {
-  Charon: 'Quiet & Deep',
-  Fenrir: 'Somber & Resonant',
-  Kore: 'Calm & Clear',
-  Puck: 'Bright & Lively',
-  Zephyr: 'Soft & Whispered',
-};
+// Gemini prebuilt TTS voices, with Google's own style label for each
+export const VOICE_DESCRIPTIONS = {
+  Zephyr: 'Bright',
+  Puck: 'Upbeat',
+  Charon: 'Informative',
+  Kore: 'Firm',
+  Fenrir: 'Excitable',
+  Leda: 'Youthful',
+  Orus: 'Firm',
+  Aoede: 'Breezy',
+  Callirrhoe: 'Easy-going',
+  Autonoe: 'Bright',
+  Enceladus: 'Breathy',
+  Iapetus: 'Clear',
+  Umbriel: 'Easy-going',
+  Algieba: 'Smooth',
+  Despina: 'Smooth',
+  Erinome: 'Clear',
+  Algenib: 'Gravelly',
+  Rasalgethi: 'Informative',
+  Laomedeia: 'Upbeat',
+  Achernar: 'Soft',
+  Alnilam: 'Firm',
+  Schedar: 'Even',
+  Gacrux: 'Mature',
+  Pulcherrima: 'Forward',
+  Achird: 'Friendly',
+  Zubenelgenubi: 'Casual',
+  Vindemiatrix: 'Gentle',
+  Sadachbia: 'Lively',
+  Sadaltager: 'Knowledgeable',
+  Sulafat: 'Warm',
+} as const;
+export type VoiceName = keyof typeof VOICE_DESCRIPTIONS;
+export const VOICES = Object.keys(VOICE_DESCRIPTIONS) as VoiceName[];
 
 export const DEFAULT_VOICE: VoiceName = 'Charon';
 
@@ -92,6 +116,12 @@ export interface Paragraph {
   /** 'narrator', a character id/name from the book's characters, or any other label */
   speaker?: string;
   isQuote?: boolean;
+}
+
+/** A stretch of a paragraph that is spoken in a single voice. */
+export interface SpeechPart {
+  text: string;
+  voice: VoiceName;
 }
 
 export interface Chapter {
@@ -259,11 +289,45 @@ export function normalizeBookConfig(raw: unknown, options: { fallbackTitle?: str
  * Voice for a paragraph: the matching character's voice, otherwise the
  * narrator voice (which the listener can override in the mixer).
  */
-export function voiceForParagraph(book: BookConfig, paragraph: Paragraph, narratorVoice: VoiceName): VoiceName {
+export function voiceForParagraph(
+  book: BookConfig,
+  paragraph: Pick<Paragraph, 'speaker'>,
+  narratorVoice: VoiceName
+): VoiceName {
   const speaker = paragraph.speaker?.trim().toLowerCase();
   if (!speaker || speaker === 'narrator') return narratorVoice;
   const character = book.characters.find((c) => c.id === speaker || c.name.toLowerCase() === speaker);
   return character ? character.voice : narratorVoice;
+}
+
+/**
+ * Splits a paragraph into the parts each voice should read. For a paragraph
+ * spoken by a character, the quoted speech is read in the character's voice
+ * and everything outside the quotes ("he said") by the narrator. A character
+ * paragraph without quotation marks is read entirely in the character's voice.
+ */
+export function speechParts(book: BookConfig, paragraph: Paragraph, narratorVoice: VoiceName): SpeechPart[] {
+  const characterVoice = voiceForParagraph(book, paragraph, narratorVoice);
+  const whole: SpeechPart[] = [{ text: paragraph.text, voice: characterVoice }];
+  if (characterVoice === narratorVoice) return whole;
+
+  const pieces = paragraph.text.split(/("[^"]*"|“[^”]*”)/);
+  if (pieces.length === 1) return whole;
+
+  const parts: SpeechPart[] = [];
+  pieces.forEach((piece, idx) => {
+    const text = piece.trim();
+    if (!text) return;
+    const voice = idx % 2 === 1 ? characterVoice : narratorVoice;
+    const last = parts[parts.length - 1];
+    // Stray punctuation between quotes isn't worth its own narration clip
+    if (last && (last.voice === voice || !/[\p{L}\p{N}]/u.test(text))) {
+      last.text = `${last.text} ${text}`;
+    } else {
+      parts.push({ text, voice });
+    }
+  });
+  return parts.length > 0 ? parts : whole;
 }
 
 /** Tone selection a book starts with: its own prompt if it has one, else its preset. */

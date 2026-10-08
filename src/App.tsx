@@ -5,7 +5,7 @@ import {
   SOUNDSCAPE_DESCRIPTIONS,
   initialToneId,
   resolveTonePrompt,
-  voiceForParagraph,
+  speechParts,
 } from '../shared/bookConfig';
 import { atmosphericEngine } from './utils/ambientEngine';
 import { synthesizeNarrationAudio, prefetchNarrationAudio } from './utils/ttsClient';
@@ -99,33 +99,33 @@ export default function App() {
     };
   }, []);
 
-  // Pre-fetch upcoming paragraph to guarantee zero-latency playback
-  const prefetchUpcoming = useCallback((chapterId: number, paraIdx: number) => {
+  // Pre-fetch the next couple of speech parts to guarantee zero-latency playback
+  const prefetchUpcoming = useCallback((chapterId: number, paraIdx: number, partIdx: number) => {
     const story = currentStoryRef.current;
     const chapter = story.chapters.find((c) => c.id === chapterId);
     if (!chapter) return;
 
-    let nextParagraph: Paragraph | null = null;
-    if (paraIdx + 1 < chapter.paragraphs.length) {
-      nextParagraph = chapter.paragraphs[paraIdx + 1];
-    } else {
-      const nextChapter = story.chapters.find((c) => c.id === chapterId + 1);
-      if (nextChapter && nextChapter.paragraphs[0]) {
-        nextParagraph = nextChapter.paragraphs[0];
-      }
+    const narratorVoice = settingsRef.current.selectedVoice;
+    const upcoming = speechParts(story, chapter.paragraphs[paraIdx], narratorVoice).slice(partIdx + 1);
+
+    const nextParagraph =
+      chapter.paragraphs[paraIdx + 1] || story.chapters.find((c) => c.id === chapterId + 1)?.paragraphs[0];
+    if (nextParagraph) {
+      upcoming.push(...speechParts(story, nextParagraph, narratorVoice));
     }
 
-    if (nextParagraph) {
+    for (const part of upcoming.slice(0, 2)) {
       prefetchNarrationAudio({
-        text: nextParagraph.text,
-        voice: voiceForParagraph(story, nextParagraph, settingsRef.current.selectedVoice),
+        text: part.text,
+        voice: part.voice,
         tonePrompt: resolveTonePrompt(settingsRef.current.tonePrompt, story),
       });
     }
   }, []);
 
-  // Play narration for a specific chapter and paragraph index
-  const playParagraph = useCallback(async (chapterId: number, paraIdx: number) => {
+  // Play narration for a specific chapter and paragraph index. A paragraph
+  // with character dialogue is played as several parts, one per voice.
+  const playParagraph = useCallback(async (chapterId: number, paraIdx: number, partIdx = 0) => {
     const story = currentStoryRef.current;
     const chapter = story.chapters.find((c) => c.id === chapterId);
     if (!chapter || !chapter.paragraphs[paraIdx]) {
@@ -141,9 +141,11 @@ export default function App() {
     setIsPlaying(true);
 
     const paragraph = chapter.paragraphs[paraIdx];
-    // Character paragraphs use the voice assigned in the book config
-    const voice = voiceForParagraph(story, paragraph, settingsRef.current.selectedVoice);
-    const speechSettings = () => ({ ...settingsRef.current, selectedVoice: voice });
+    // Character dialogue uses the voice assigned in the book config
+    const parts = speechParts(story, paragraph, settingsRef.current.selectedVoice);
+    const part = parts[partIdx] || parts[0];
+    const hasMoreParts = partIdx + 1 < parts.length;
+    const speechSettings = () => ({ ...settingsRef.current, selectedVoice: part.voice });
 
     // Scroll smoothly to active paragraph
     const el = document.getElementById(`para-${paragraph.id}`);
@@ -151,16 +153,16 @@ export default function App() {
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // Prefetch next paragraph in the background
-    prefetchUpcoming(chapterId, paraIdx);
+    // Prefetch what comes next in the background
+    prefetchUpcoming(chapterId, paraIdx, partIdx);
 
     try {
       atmosphericEngine.init();
       atmosphericEngine.setPreset(chapter.soundscape);
 
       const result = await synthesizeNarrationAudio({
-        text: paragraph.text,
-        voice,
+        text: part.text,
+        voice: part.voice,
         tonePrompt: resolveTonePrompt(settingsRef.current.tonePrompt, story),
       });
 
@@ -176,6 +178,11 @@ export default function App() {
 
       const onParagraphCompleted = () => {
         if (!isPlayingRef.current) return;
+
+        if (hasMoreParts) {
+          playParagraph(chapterId, paraIdx, partIdx + 1);
+          return;
+        }
 
         const currentStorySnap = currentStoryRef.current;
         const currentChapSnap = currentStorySnap.chapters.find((c) => c.id === chapterId);
@@ -207,7 +214,7 @@ export default function App() {
       } else {
         setIsUsingFallbackTTS(true);
         atmosphericEngine.playWebSpeech(
-          paragraph.text,
+          part.text,
           speechSettings(),
           onParagraphCompleted
         );
@@ -218,10 +225,14 @@ export default function App() {
         setIsUsingFallbackTTS(true);
         setIsLoadingAudio(false);
         atmosphericEngine.playWebSpeech(
-          paragraph.text,
+          part.text,
           speechSettings(),
           () => {
             if (!isPlayingRef.current) return;
+            if (hasMoreParts) {
+              playParagraph(chapterId, paraIdx, partIdx + 1);
+              return;
+            }
             const nextParaIdx = paraIdx + 1;
             const currentChap = currentStoryRef.current.chapters.find((c) => c.id === chapterId);
             if (currentChap && nextParaIdx < currentChap.paragraphs.length) {

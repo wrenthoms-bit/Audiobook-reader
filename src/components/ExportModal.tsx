@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BookConfig, Chapter, Paragraph, AmbientSettings, VoiceName } from '../types';
-import { resolveTonePrompt, toneLabel, voiceForParagraph } from '../../shared/bookConfig';
+import { resolveTonePrompt, speechParts, toneLabel } from '../../shared/bookConfig';
 import { atmosphericEngine, AmbientSegment } from '../utils/ambientEngine';
 import { synthesizeNarrationAudio, createAtmosphericFallbackAudioBuffer } from '../utils/ttsClient';
 import { audioBufferToWavBlob, audioBufferToMp3Blob, concatAudioBuffersWithOffsets, normalizeBuffersToMatchLoudness } from '../utils/audioUtils';
@@ -123,17 +123,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           text: chapter.subtitle ? `${chapter.title}: ${chapter.subtitle}` : chapter.title,
         };
 
-        // Batch consecutive paragraphs that share a voice, so character
-        // dialogue is rendered in the voice assigned in the book config.
+        // Batch consecutive text that shares a voice, so character dialogue
+        // is rendered in the voice assigned in the book config.
         const runs: { voice: VoiceName; paragraphs: Paragraph[] }[] = [];
         for (const paragraph of [titleParagraph, ...chapter.paragraphs]) {
-          const voice = voiceForParagraph(book, paragraph, settings.selectedVoice);
-          const lastRun = runs[runs.length - 1];
-          if (lastRun && lastRun.voice === voice) {
-            lastRun.paragraphs.push(paragraph);
-          } else {
-            runs.push({ voice, paragraphs: [paragraph] });
-          }
+          speechParts(book, paragraph, settings.selectedVoice).forEach((part, partIdx) => {
+            const piece: Paragraph = { id: `${paragraph.id}-${partIdx}`, text: part.text };
+            const lastRun = runs[runs.length - 1];
+            if (lastRun && lastRun.voice === part.voice) {
+              lastRun.paragraphs.push(piece);
+            } else {
+              runs.push({ voice: part.voice, paragraphs: [piece] });
+            }
+          });
         }
 
         const runBuffers: AudioBuffer[] = [];
@@ -141,7 +143,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           runBuffers.push(await synthesizeTextGroup(run.paragraphs, run.voice, label));
         }
         if (runBuffers.length === 1) return runBuffers[0];
-        const { buffer } = await concatAudioBuffersWithOffsets(runBuffers, 0.35, 44100);
+        const { buffer } = await concatAudioBuffersWithOffsets(runBuffers, 0.2, 44100);
         return buffer;
       };
 

@@ -7,6 +7,7 @@ import {
   SOUNDSCAPES,
   TONE_PRESETS,
   VOICES,
+  VOICE_DESCRIPTIONS,
   normalizeBookConfig,
 } from '../shared/bookConfig';
 
@@ -321,8 +322,8 @@ export async function structureBookWithGemini(
 Output MUST be strictly valid JSON matching the requested schema.
 - Break the story into chapters (1 to 10 chapters depending on length).
 - Provide the book title, author (empty string if unknown), a short subtitle, and a one-sentence description.
-- List the main speaking characters. Give each a short lowercase id, a display name, and a voice (one of ${VOICES.join(', ')}) that suits them. Use different voices for characters who talk to each other where possible.
-- Choose narration.narratorVoice (one of ${VOICES.join(', ')}) and narration.tonePreset (one of ${Object.keys(TONE_PRESETS).join(', ')}) to suit the book.
+- List the main speaking characters. Give each a short lowercase id, a display name, and a voice that suits them, chosen from: ${VOICES.map((v) => `${v} (${VOICE_DESCRIPTIONS[v]})`).join(', ')}. Use different voices for characters who talk to each other where possible.
+- Choose narration.narratorVoice (from the same voice list) and narration.tonePreset (one of ${Object.keys(TONE_PRESETS).join(', ')}) to suit the book.
 - Choose defaultSoundscape (one of ${SOUNDSCAPES.join(', ')}) as the book's overall ambience.
 - For each chapter, provide title, subtitle, mood, soundscape (one of ${SOUNDSCAPES.join(', ')}), and paragraphs.
 - For each paragraph, provide a unique id, the cleaned text (no page numbers, no line breaks mid-sentence), and speaker: 'narrator' for narration, or the id of the character speaking when the paragraph is mostly that character's dialogue.`;
@@ -370,7 +371,7 @@ Output MUST be strictly valid JSON matching the requested schema.
           narration: {
             type: Type.OBJECT,
             properties: {
-              narratorVoice: { type: Type.STRING, description: `One of: ${VOICES.join(', ')}` },
+              narratorVoice: { type: Type.STRING, description: 'A voice name from the list in the instructions' },
               tonePreset: { type: Type.STRING, description: `One of: ${Object.keys(TONE_PRESETS).join(', ')}` },
             },
           },
@@ -382,7 +383,7 @@ Output MUST be strictly valid JSON matching the requested schema.
               properties: {
                 id: { type: Type.STRING },
                 name: { type: Type.STRING },
-                voice: { type: Type.STRING, description: `One of: ${VOICES.join(', ')}` },
+                voice: { type: Type.STRING, description: 'A voice name from the list in the instructions' },
               },
               required: ['id', 'name', 'voice'],
             },
