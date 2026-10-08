@@ -30,10 +30,11 @@ export interface ParsedStory {
  */
 function stripHtml(html: string): string {
   return html
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
     .replace(/<br\s*[\/]?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/(?:p|h[1-6]|div|li|blockquote)>/gi, '\n\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -310,7 +311,9 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
         await parser.load();
       }
       if (typeof parser.getText === 'function') {
-        const text = await parser.getText();
+        // pdf-parse v2 returns a TextResult object ({ text, pages, ... }), not a string
+        const result = await parser.getText();
+        const text = typeof result === 'string' ? result : result?.text;
         if (text && typeof text === 'string') return text;
       }
     }

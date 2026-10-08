@@ -78,9 +78,6 @@ export default function App() {
   const currentChapterIdRef = useRef(currentChapterId);
   currentChapterIdRef.current = currentChapterId;
 
-  const activeParagraphIndexRef = useRef(activeParagraphIndex);
-  activeParagraphIndexRef.current = activeParagraphIndex;
-
   const currentStoryRef = useRef(currentStory);
   currentStoryRef.current = currentStory;
 
@@ -181,7 +178,7 @@ export default function App() {
         const currentChapSnap = currentStorySnap.chapters.find((c) => c.id === chapterId);
         if (!currentChapSnap) return;
 
-        const nextParaIdx = activeParagraphIndexRef.current + 1;
+        const nextParaIdx = paraIdx + 1;
         if (nextParaIdx < currentChapSnap.paragraphs.length) {
           playParagraph(chapterId, nextParaIdx);
         } else {
@@ -222,7 +219,7 @@ export default function App() {
           settingsRef.current,
           () => {
             if (!isPlayingRef.current) return;
-            const nextParaIdx = activeParagraphIndexRef.current + 1;
+            const nextParaIdx = paraIdx + 1;
             const currentChap = currentStoryRef.current.chapters.find((c) => c.id === chapterId);
             if (currentChap && nextParaIdx < currentChap.paragraphs.length) {
               playParagraph(chapterId, nextParaIdx);
